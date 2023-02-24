@@ -1,0 +1,10 @@
+_target_: src.data.TUTSoundEventsDataModule.TUTSoundEventsDataModule
+root: /root/workspace/lightning-hydra-template/data/real
+batch_size: 16
+test_fold_idx: 1
+sequence_duration: 30
+chunk_length: 2.
+frame_length: 0.04
+num_fft_bins: 2048
+max_num_sources: 5
+num_overlapping_sources: 1

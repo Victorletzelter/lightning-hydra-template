@@ -20,4 +20,13 @@ pyrootutils     # standardizing the project root setup
 pre-commit      # hooks for applying linters on commit
 rich            # beautiful text formatting in terminal
 pytest          # tests
+numpy
+pandas
+PyYAML
+scipy
+torch
+test_tube
+tensorboard
+datetime
+wandb
 # sh            # for running bash commands in some tests (linux/macos only)
