@@ -12,7 +12,8 @@ class TUTSoundEventsDataModule(pl.LightningDataModule):
                  num_fft_bins: int = 2048,
                  max_num_sources: int = 5,
                  num_overlapping_sources: int = None,
-                 batch_size: int = 32):
+                 batch_size: int = 32,
+                 num_workers: int = 16):
         super().__init__()
         self.root = root
         self.tmp_dir = tmp_dir
@@ -24,6 +25,7 @@ class TUTSoundEventsDataModule(pl.LightningDataModule):
         self.max_num_sources = max_num_sources
         self.num_overlapping_sources = num_overlapping_sources
         self.batch_size = batch_size
+        self.num_workers = num_workers
 
     def prepare_data(self):
         # Download data if needed
@@ -48,10 +50,10 @@ class TUTSoundEventsDataModule(pl.LightningDataModule):
                                            num_overlapping_sources=self.num_overlapping_sources)
 
     def train_dataloader(self):
-        return DataLoader(self.train_dataset, batch_size=self.batch_size, num_workers=8, shuffle=False)
+        return DataLoader(self.train_dataset, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=False)
 
     def val_dataloader(self):
-        return DataLoader(self.val_dataset, batch_size=self.batch_size, num_workers=8, shuffle=False)
+        return DataLoader(self.val_dataset, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=False)
 
     # def test_dataloader(self):
     #     return DataLoader(self.test_dataset, batch_size=self.batch_size, num_workers=8, shuffle=False)
@@ -59,7 +61,7 @@ class TUTSoundEventsDataModule(pl.LightningDataModule):
     def test_dataloader(self) :
         # During testing, a whole sequence is packed into one batch. The batch size set for training and validation
         # is ignored in this case.
-        num_chunks_per_sequence = int(self.hparams['sequence_duration'] / self.hparams['chunk_length'])
+        num_chunks_per_sequence = int(self.sequence_duration / self.chunk_length)
 
         test_loaders = []
 
@@ -70,6 +72,6 @@ class TUTSoundEventsDataModule(pl.LightningDataModule):
                                         max_num_sources=self.max_num_sources,
                                         num_overlapping_sources=num_overlapping_sources)
 
-            test_loaders.append(DataLoader(test_dataset, batch_size=self.batch_size, num_workers=8, shuffle=False))
+            test_loaders.append(DataLoader(test_dataset, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=False))
 
         return test_loaders

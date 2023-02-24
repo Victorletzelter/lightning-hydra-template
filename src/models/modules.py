@@ -240,30 +240,12 @@ class FeatureExtraction(nn.Module):
                                time steps per chunk, B is the number of FFT bins and C is the number of audio channels.
         :return: Extracted features with dimension [NxTxB/4].
         """
-        print("audio features shape")
-        print(audio_features.shape)
-        
-        output = self.conv_layer1(audio_features)
-        print("layer 1 output shape")
-        print(output.shape)
-        
-        output = self.conv_layer2(output)
-        print("layer 2 output shape")
-        print(output.shape)
-        
+        output = self.conv_layer1(audio_features)     
+        output = self.conv_layer2(output)    
         output = self.conv_layer3(output)
-        print("layer 3 output shape")
-        print(output.shape)
-
         output = output.permute(0, 2, 1, 3)
-        print("permutation output shape")
-        print(output.shape)
-        
         batch_size, num_frames, _, _ = output.shape
         output = output.contiguous().view(batch_size, num_frames, -1)
-        
-        print("output shape")
-        print(output.shape)
 
         return self.layer_norm(output)
 

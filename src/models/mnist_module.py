@@ -4,6 +4,7 @@ import torch
 from pytorch_lightning import LightningModule
 from torchmetrics import MaxMetric, MeanMetric
 from torchmetrics.classification.accuracy import Accuracy
+from torch.utils.tensorboard import SummaryWriter
 
 
 class MNISTLitModule(LightningModule):
@@ -72,9 +73,9 @@ class MNISTLitModule(LightningModule):
         # update and log metrics
         self.train_loss(loss)
         self.train_acc(preds, targets)
-        self.log("train/loss", self.train_loss, on_step=False, on_epoch=True, prog_bar=True)
-        self.log("train/acc", self.train_acc, on_step=False, on_epoch=True, prog_bar=True)
-
+        self.log("train/loss", self.train_loss, on_step=True, on_epoch=True, prog_bar=True,logger=True)
+        self.log("train/acc", self.train_acc, on_step=True, on_epoch=True, prog_bar=True,logger=True)
+        
         # we can return here dict with any tensors
         # and then read it in some callback or in `training_epoch_end()` below
         # remember to always return loss from `training_step()` or backpropagation will fail!

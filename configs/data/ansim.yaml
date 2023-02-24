@@ -8,3 +8,4 @@ frame_length: 0.04
 num_fft_bins: 2048
 max_num_sources: 4
 num_overlapping_sources: 1
+num_workers: 64

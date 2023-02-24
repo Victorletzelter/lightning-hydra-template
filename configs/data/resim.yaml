@@ -3,9 +3,9 @@ root: /root/workspace/lightning-hydra-template/data/resim
 batch_size: 16
 test_fold_idx: 1
 sequence_duration: 30
-chunk_length: 2.
+chunk_length: 0.5
 frame_length: 0.04
 num_fft_bins: 2048
-max_num_sources: 5
+max_num_sources: 4
 num_overlapping_sources: 1
-
+num_workers: 16

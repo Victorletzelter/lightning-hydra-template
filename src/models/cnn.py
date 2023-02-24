@@ -15,9 +15,6 @@ class CNN(AbstractLocalizationModule):
 
         num_steps_per_chunk = int(2 * hparams['chunk_length'] / hparams['frame_length'])
         
-        print("ICI !!!")
-        print(num_steps_per_chunk)
-        
         self.feature_extraction = FeatureExtraction(num_steps_per_chunk=num_steps_per_chunk,
                                                     num_fft_bins=hparams['num_fft_bins'],
                                                     dropout_rate=hparams['dropout_rate'])
@@ -32,13 +29,7 @@ class CNN(AbstractLocalizationModule):
     def forward(self,
                 audio_features: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, dict]:
         
-        print("audio features shape")
-        print(audio_features.shape)
-        
         extracted_features = self.feature_extraction(audio_features)
-        
-        print("extracted features shape")
-        print(extracted_features.shape)
 
         source_activity_output, direction_of_arrival_output = self.localization_output(extracted_features)
         meta_data = {}
