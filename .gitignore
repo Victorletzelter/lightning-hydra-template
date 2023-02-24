@@ -151,4 +151,7 @@ configs/local/default.yaml
 /logs/
 .env
 
+#Tmp files
+tmp/
+
 
