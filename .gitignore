@@ -108,6 +108,7 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+lightning_hydra_env/
 
 # Spyder project settings
 .spyderproject
@@ -149,3 +150,5 @@ configs/local/default.yaml
 /data/
 /logs/
 .env
+
+
