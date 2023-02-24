@@ -152,6 +152,6 @@ configs/local/default.yaml
 .env
 
 #Tmp files
-tmp/
+/tmp/
 
 

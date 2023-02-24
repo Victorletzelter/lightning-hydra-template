@@ -2,8 +2,8 @@
 
 defaults:
   - _self_
-  - data: resim.yaml # choose datamodule with `test_dataloader()` for evaluation
-  - model: resim.yaml
+  - data: ansim.yaml # choose datamodule with `test_dataloader()` for evaluation
+  - model: cnn.yaml
   - logger: null
   - trainer: default.yaml
   - paths: default.yaml

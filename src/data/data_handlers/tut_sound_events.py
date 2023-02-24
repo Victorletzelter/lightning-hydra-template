@@ -7,7 +7,7 @@ from scipy.io import wavfile
 from scipy.signal import stft
 from torch.utils.data import Dataset
 from typing import Tuple
-
+import h5py
 
 class TUTSoundEvents(Dataset):
     """
@@ -221,8 +221,11 @@ class TUTSoundEvents(Dataset):
         _, dataset_name = os.path.split(group_path)
         parameter_hash = self._get_parameter_hash()
 
-        feature_file_name = file_name + '_' + str(sequence['chunk_idx']) + '_f.npz'
-        target_file_name = file_name + '_' + str(sequence['chunk_idx']) + '_t' + str(self.max_num_sources) + '.npz'
+        # feature_file_name = file_name + '_' + str(sequence['chunk_idx']) + '_f.npz'
+        # target_file_name = file_name + '_' + str(sequence['chunk_idx']) + '_t' + str(self.max_num_sources) + '.npz'
+        
+        feature_file_name = file_name + '_' + str(sequence['chunk_idx']) + '_f.h5'
+        target_file_name = file_name + '_' + str(sequence['chunk_idx']) + '_t' + str(self.max_num_sources) + '.h5'
 
         path_to_feature_file = os.path.join(self.tmp_dir, dataset_name, group_name, parameter_hash)
         if not os.path.isdir(path_to_feature_file):
@@ -230,21 +233,39 @@ class TUTSoundEvents(Dataset):
                 os.makedirs(path_to_feature_file)
             except:
                 pass
-
+            
         if os.path.isfile(os.path.join(path_to_feature_file, feature_file_name)):
-            data = np.load(os.path.join(path_to_feature_file, feature_file_name), allow_pickle=True)
-            audio_features = data['audio_features']
+            with h5py.File(os.path.join(path_to_feature_file, feature_file_name), 'r') as f:
+                audio_features = f['audio_features'][:]
         else:
             audio_features = self._get_audio_features(sequence['audio_file'], sequence['start_time'], sequence['end_time'])
-            np.savez_compressed(os.path.join(path_to_feature_file, feature_file_name), audio_features=audio_features)
+            with h5py.File(os.path.join(path_to_feature_file, feature_file_name), 'w') as f:
+                f.create_dataset('audio_features', data=audio_features, compression='gzip')
 
         if os.path.isfile(os.path.join(path_to_feature_file, target_file_name)):
-            data = np.load(os.path.join(path_to_feature_file, target_file_name), allow_pickle=True)
-            source_activity = data['source_activity']
-            direction_of_arrival = data['direction_of_arrival']
+            with h5py.File(os.path.join(path_to_feature_file, target_file_name), 'r') as f:
+                source_activity = f['source_activity'][:]
+                direction_of_arrival = f['direction_of_arrival'][:]
         else:
             source_activity, direction_of_arrival = self._get_targets(sequence['annotation_file'], sequence['start_time'])
-            np.savez_compressed(os.path.join(path_to_feature_file, target_file_name),
-                                source_activity=source_activity, direction_of_arrival=direction_of_arrival)
+            with h5py.File(os.path.join(path_to_feature_file, target_file_name), 'w') as f:
+                f.create_dataset('source_activity', data=source_activity, compression='gzip')
+                f.create_dataset('direction_of_arrival', data=direction_of_arrival, compression='gzip')
+
+        # if os.path.isfile(os.path.join(path_to_feature_file, feature_file_name)):
+        #     data = np.load(os.path.join(path_to_feature_file, feature_file_name), allow_pickle=True)
+        #     audio_features = data['audio_features']
+        # else:
+        #     audio_features = self._get_audio_features(sequence['audio_file'], sequence['start_time'], sequence['end_time'])
+        #     np.savez_compressed(os.path.join(path_to_feature_file, feature_file_name), audio_features=audio_features)
+
+        # if os.path.isfile(os.path.join(path_to_feature_file, target_file_name)):
+        #     data = np.load(os.path.join(path_to_feature_file, target_file_name), allow_pickle=True)
+        #     source_activity = data['source_activity']
+        #     direction_of_arrival = data['direction_of_arrival']
+        # else:
+        #     source_activity, direction_of_arrival = self._get_targets(sequence['annotation_file'], sequence['start_time'])
+        #     np.savez_compressed(os.path.join(path_to_feature_file, target_file_name),
+        #                         source_activity=source_activity, direction_of_arrival=direction_of_arrival)
 
         return audio_features.astype(np.float32), (source_activity.astype(np.float32), direction_of_arrival.astype(np.float32))
