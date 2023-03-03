@@ -136,9 +136,14 @@ class ADRENALINE(AbstractLocalizationModule):
                 source_activity, direction_of_arrival, hidden, encoder_outputs)
 
             attention_map.append(attention_weights.unsqueeze(-1))
-
-            source_activity_output[:, step_idx, :] = source_activity.squeeze()
-            direction_of_arrival_output[:, step_idx, :, :] = direction_of_arrival.squeeze()
+            
+            if self.max_num_sources == 1 : 
+                source_activity_output[:, step_idx, :] = source_activity.squeeze().unsqueeze(-1)
+                direction_of_arrival_output[:, step_idx, :, :] = direction_of_arrival.squeeze().unsqueeze(-2)
+                
+            else : 
+                source_activity_output[:, step_idx, :] = source_activity.squeeze()
+                direction_of_arrival_output[:, step_idx, :, :] = direction_of_arrival.squeeze()
 
         attention_map = torch.cat(attention_map, dim=-1)
 

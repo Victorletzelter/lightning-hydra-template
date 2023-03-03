@@ -33,17 +33,17 @@ class TUTSoundEventsDataModule(pl.LightningDataModule):
 
     def setup(self, stage=None):
         # Define dataset split for train/val/test
-        self.train_dataset = TUTSoundEvents(self.root, split='train', test_fold_idx=self.test_fold_idx,
+        self.train_dataset = TUTSoundEvents(self.root,  tmp_dir = self.tmp_dir, split='train', test_fold_idx=self.test_fold_idx,
                                             sequence_duration=self.sequence_duration, chunk_length=self.chunk_length,
                                             frame_length=self.frame_length, num_fft_bins=self.num_fft_bins,
                                             max_num_sources=self.max_num_sources,
                                             num_overlapping_sources=self.num_overlapping_sources)
-        self.val_dataset = TUTSoundEvents(self.root, split='valid', test_fold_idx=self.test_fold_idx,
+        self.val_dataset = TUTSoundEvents(self.root,  tmp_dir = self.tmp_dir, split='valid', test_fold_idx=self.test_fold_idx,
                                           sequence_duration=self.sequence_duration, chunk_length=self.chunk_length,
                                           frame_length=self.frame_length, num_fft_bins=self.num_fft_bins,
                                           max_num_sources=self.max_num_sources,
                                           num_overlapping_sources=self.num_overlapping_sources)
-        self.test_dataset = TUTSoundEvents(self.root, split='test', test_fold_idx=self.test_fold_idx,
+        self.test_dataset = TUTSoundEvents(self.root,  tmp_dir = self.tmp_dir, split='test', test_fold_idx=self.test_fold_idx,
                                            sequence_duration=self.sequence_duration, chunk_length=self.chunk_length,
                                            frame_length=self.frame_length, num_fft_bins=self.num_fft_bins,
                                            max_num_sources=self.max_num_sources,
@@ -66,7 +66,7 @@ class TUTSoundEventsDataModule(pl.LightningDataModule):
         test_loaders = []
 
         for num_overlapping_sources in range(1, 4):
-            test_dataset = TUTSoundEvents(self.root, test_fold_idx=self.test_fold_idx,
+            test_dataset = TUTSoundEvents(self.root,  tmp_dir = self.tmp_dir, test_fold_idx=self.test_fold_idx,
                                         sequence_duration=self.sequence_duration, chunk_length=self.chunk_length,
                                         frame_length=self.frame_length, num_fft_bins=self.num_fft_bins,
                                         max_num_sources=self.max_num_sources,

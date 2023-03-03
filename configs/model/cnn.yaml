@@ -5,7 +5,7 @@ cv_fold_idx: 1
 
 hparams : 
   name: 'CNN'
-  max_num_sources: 4
+  max_num_sources: 1
   sequence_duration: 30
   num_fft_bins: 2048
   frame_length: 0.04
@@ -16,3 +16,4 @@ hparams :
   gradient_clip_val: 1.0
   alpha: 1
   results_dir: /root/workspace/lightning-hydra-template/results
+  # tmp_dir: ${paths.output_dir}/tmp

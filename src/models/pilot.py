@@ -100,7 +100,10 @@ class PILOT(AbstractLocalizationModule):
         """
         embeddings, observation_noise = self.feature_extraction(audio_features)
 
-        source_activity = torch.sigmoid(self.source_activity_fc(embeddings).squeeze())
+        if self.max_num_sources == 1 : 
+            source_activity = torch.sigmoid(self.source_activity_fc(embeddings).squeeze().unsqueeze(-1))
+        else : 
+            source_activity = torch.sigmoid(self.source_activity_fc(embeddings).squeeze())
         posterior_mean = []
         posterior_covariance = []
 
@@ -122,7 +125,7 @@ class PILOT(AbstractLocalizationModule):
         
         posterior_mean = torch.cat(posterior_mean, dim=-1).permute(0, 1, 3, 2)
         posterior_covariance = torch.cat(posterior_covariance, dim=-1).permute(0, 1, 4, 2, 3)
-        source_activity = source_activity.permute(0, 2, 1)
+        # source_activity = source_activity.permute(0, 2, 1)
 
         return source_activity, posterior_mean, posterior_covariance
     
