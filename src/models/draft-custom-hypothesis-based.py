@@ -1,5 +1,5 @@
 from argparse import Namespace
-from .modules import AbstractLocalizationModule, FeatureExtraction, LocalizationOutput, MHLocalizationOutput, TimeDistributedFC
+from .modules import AbstractLocalizationModule, FeatureExtraction, MHLocalizationOutput
 import torch
 import torch.nn as nn
 from typing import Tuple
@@ -34,7 +34,7 @@ class SELDNet(AbstractLocalizationModule):
 
         output, _ = self.gru(extracted_features) # output of shape [NxTxhparams['hidden_dim']]
 
-        MHsource_activity_output, MHdirection_of_arrival_output = self.localization_output(output)
+        MHdirection_of_arrival_output = self.localization_output(output) # output of shape [N,T,num_hypothesis,2]
         meta_data = {}
 
-        return MHsource_activity_output, MHdirection_of_arrival_output, meta_data
+        return MHdirection_of_arrival_output, meta_data

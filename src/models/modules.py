@@ -324,17 +324,23 @@ class MHLocalizationOutput(nn.Module):
         
         num_hypothesis: Number of hypothesis in the model. (TODOO)
     """
-    def __init__(self, input_dim: int, num_hypthesis: int):
+    def __init__(self, input_dim: int, num_hypthesis: int, output_dim: int=2):
         super(LocalizationOutput, self).__init__()
 
         self.source_activity_output_layers = {}
         self.azimuth_output_layers = {}
         self.elevation_output_layers = {}
+        self.doa_layers = {}
         self.num_hypothesis = num_hypthesis
+        self.output_dim = output_dim
         
         for i in range(self.num_hypothesis) :  
-            self.azimuth_output_layers['hyp_'+'{}'.format(i)] = TimeDistributedFC(input_dim, self.num_hypothesis)
-            self.elevation_output_layers['hyp_'+'{}'.format(i)] = TimeDistributedFC(input_dim, self.num_hypothesis)
+            # self.azimuth_output_layers['hyp_'+'{}'.format(i)] = TimeDistributedFC(input_dim, self.num_hypothesis)
+            # self.elevation_output_layers['hyp_'+'{}'.format(i)] = TimeDistributedFC(input_dim, self.num_hypothesis)
+            self.doa_layers['hyp_'+'{}'.format(i)] = TimeDistributedFC(input_dim, output_dim)
+            
+        ### OR 
+        # self.doa_layers = TimeDistributedFC(input_dim, self.num_hypothesis*2) #if output_dim=2
 
     def forward(self,
                 input: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -342,16 +348,18 @@ class MHLocalizationOutput(nn.Module):
 
         :param input: Input tensor with dimensions [NxTxD], where N is the batch size, T is the number of time steps per
                     chunk and D is the input dimension.
-        :return: Tuple containing the source activities dictionnary of source activity tensors of size [NxTxS] 
-        and the directions_of_arrival dictionnary of diction-of-arrival tensors with
-                dimensions [NxTxSx2], where S is the maximum number of sources.
+        :return: Stacked direciton of arrival hypothesis with shape NxTxself.num_hypothesisxoutput_dim. 
         """  
-        source_activities = {}
-        directions_of_arrival = {}
+        directions_of_arrival = []
         
         for i in range(self.num_hypothesis) :
-            azimuth = self.azimuth_output_layers['hyp_'+'{}'.format(i)](input)
-            elevation = self.elevation_output_layers['hyp_'+'{}'.format(i)](input)
-            directions_of_arrival['hyp_'+'{}'.format(i)] = torch.cat((azimuth.unsqueeze(-1), elevation.unsqueeze(-1)), dim=-1)
+            directions_of_arrival.append(self.doa_layers['hyp_'+'{}'.format(i)](input)) # Size [NxTx2]
+            
+        hyp_stacked = torch.stack(directions_of_arrival, dim=-2) #Shape [NxTxself.num_hypothesisx2]
 
-        return source_activities, directions_of_arrival
+        ### OR 
+        # directions_of_arrival = self.doa_layers(input) # Size [NxTx(2*self.num_hypothesis)]
+        # hyps_splitted = torch.split(directions_of_arrival, [2 for i in range(num_hypothesis)], 2) #num_hypothesis-uples of elements of shape [N,T,2]
+        # hyps_stacked = torch.stack([h for h in hyps_splitted], dim=2) #Tuples of elements of shape [N,T,num_hypothesis,2]
+
+        return hyp_stacked

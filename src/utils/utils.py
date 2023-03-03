@@ -259,7 +259,7 @@ class SELLoss(_Loss):
                 predictions: torch.Tensor,
                 targets: torch.Tensor) -> Tuple[torch.Tensor, dict]:
         source_activity_pred, direction_of_arrival_pred, _ = predictions
-        source_activity_target, direction_of_arrival_target = targets
+        source_activity_target, direction_of_arrival_target = targets 
 
         source_activity_bce_loss = F.binary_cross_entropy_with_logits(source_activity_pred, source_activity_target)
 
@@ -413,30 +413,168 @@ class MHSELLoss(_Loss):
 
         return torch.acos(F.hardtanh(sine_term + cosine_term, min_val=-1, max_val=1))
     
-    def forward(MHpredictions: Dict[str, torch.Tensor],
-                targets: torch.Tensor) :
-        MHsource_activity_pred, MHdirection_of_arrival_pred, _ = MHpredictions
-        source_activity_target, direction_of_arrival_target = targets
+    # def forward(self, MHpredictions: Dict[str, torch.Tensor],
+    #             targets: torch.Tensor) :
+    #     hyps_DOAs_pred_stacked, _ = MHpredictions #Shape [NxTxself.num_hypothesisx2]
+    #     source_activity_target, direction_of_arrival_target = targets #Shape [N,T,Max_sources],[N,T,Max_sources,2]
+        
+    #     ### Extract the DOAs associated with the number of active sources
+    #     number_actives_sources = torch.sum(source_activity_target,dim=-1) #[N,T]
+    #     loss = 0
+    #     # direction_of_arrival_target[:number_actives_sources[batch,t]] ???
+        
+    #     for t in range(source_activity_target.shape[1]) : 
+    #         gt = 
+    #         loss+=self.make_sampling_loss(hyps_stacked=hyps_DOAs_pred_stacked, gt=gt, mode='epe', top_n=1)
+        
+    #     return loss 
+    
+    def make_sampling_loss_ambiguous_gts(self, hyps_stacked_t, source_activity_target_t, direction_of_arrival_target_t, mode='epe', top_n=1):
+        # hyps_stacked_t of shape [batchxself.num_hypothesisx2]
+        # source_activity_target_t of shape [batch,Max_sources]
+        # direction_of_arrival_target_t of shape [N,Max_sources,2]
+        # TODOO: mode 
+        # TODOO top_n
+        
+        source_activity_target_t #Shape [batch,Max_sources]
+        direction_of_arrival_target_t #Shape [batch,Max_sources,2]
+        filling_value = torch.tensor([1000,1000])
+        num_hyps = hyps_stacked_t.shape[1]
+        batch = source_activity_target_t.shape[0]
+        Max_sources = source_activity_target_t.shape[1]
+        
+        #1st padding related to the inactive sources not considered in the error calculation (with high error values)
+        direction_of_arrival_target_t[source_activity_target_t == 0, :, :] = filling_value
+        
+        #2nd padding related for the Max_sources dimension set to the number of hypothesis
+        gts = torch.nn.functional.pad(input = direction_of_arrival_target_t, pad = (0,0,0,num_hyps-Max_sources),value=filling_value)
+        #Shape [batch,num_hyps,2]
 
-    def forward(self,
-                predictions: torch.Tensor,
-                targets: torch.Tensor) -> Tuple[torch.Tensor, dict]:
-        source_activity_pred, direction_of_arrival_pred, _ = predictions
-        source_activity_target, direction_of_arrival_target = targets
+        epsillon = 0.05
+        eps = 0.001
+        
+        #### With euclidean distance
+        diff = torch.square(hyps_stacked_t - gts).unsqueeze(-1).unsqueeze(-1) # (batch, num_hyps, 2, 1, 1)
+        channels_sum = torch.sum(diff, dim=2) # (batch, num_hyps, 1, 1)
+        spatial_epes = torch.sqrt(channels_sum + eps)  # (batch, num_hyps , 1, 1)
 
-        source_activity_bce_loss = F.binary_cross_entropy_with_logits(source_activity_pred, source_activity_target)
+        ### With spherical distance
+        
+        # V1 
+        hyps_stacked_t = hyps_stacked_t.view(-1,2)
+        gts = gts.view(-1,2)
+        diff = compute_spherical_distance(hyps_stacked_t,gts)
+        diff = diff.view(batch,num_hyps)
+        diff = diff.unsqueeze(2).unsqueeze(3).unsqueeze(4)
+        # V2
+        # hyps_stacked_t of shape (batch,num_hyps,2), gts of shape (batch, num_hyps, 2)
+        # Compute the diff tensor using tensor operations
+        sine_term = torch.sin(hyps_stacked_t[:, :, 0]) * torch.sin(gts[:, :, 0])  # (batch, num_hyps)
+        cosine_term = torch.cos(hyps_stacked_t[:, :, 0]) * torch.cos(gts[:, :, 0]) * torch.cos(gts[:, :, 1] - hyps_stacked_t[:, :, 1])  # (batch, num_hyps)
+        diff = torch.acos(torch.clamp(sine_term + cosine_term, min=-1, max=1))  # (batch, num_hyps)
+        spatial_epes = diff.unsqueeze(2).unsqueeze(3).unsqueeze(4)  # (batch, num_hyps, 1, 1, 1) 
+        
+        sum_losses = torch.constant(0.0)
 
-        source_activity_mask = source_activity_target.bool()
+        if mode == 'epe':
+            spatial_epe = torch.min(spatial_epes, dim=1) #(batch, 1, 1)
+            loss = torch.multiply(torch.mean(spatial_epe), 1.0) # Scalar (average of the losses)
+            sum_losses = torch.add(loss, sum_losses) 
 
-        spherical_distance = self.compute_spherical_distance(
-            direction_of_arrival_pred[source_activity_mask], direction_of_arrival_target[source_activity_mask])
-        direction_of_arrival_loss = self.alpha * torch.mean(spherical_distance)
+        elif mode == 'epe-relaxed':
+            spatial_epe = torch.min(spatial_epes, dim=1) #(batch, 1, 1)
+            loss0 = torch.multiply(torch.mean(spatial_epe), 1 - 2 * epsillon) #Scalar (average with coefficient)
 
-        loss = source_activity_bce_loss + direction_of_arrival_loss
+            for i in range(num_hyps):
+                loss = torch.multiply(torch.mean(spatial_epes[:, i, :, :]), epsillon / (num_hyps)) #Scalar for each hyp
+                sum_losses = torch.add(loss, sum_losses)
+                
+            sum_losses = torch.add(loss0, sum_losses)
 
-        meta_data = {
-            'source_activity_loss': source_activity_bce_loss,
-            'direction_of_arrival_loss': direction_of_arrival_loss
-        }
+        elif mode == 'epe-top-n' and top_n > 1:
+            spatial_epes_transposed = torch.multiply(torch.transpose(spatial_epes, perm=[0, 2, 3, 1]), -1) #(batch, 1 ,1, num_hyps)
+            top_k, indices = torch.topk(input=spatial_epes_transposed, k=top_n, dim=-1) #(batch, 1 ,1, num_hyps) ranked
+            spatial_epes_min = torch.multiply(torch.transpose(top_k, perm=[0, 3, 1, 2]), -1) #(batch, num_hyps, 1, 1)
+            for i in range(top_n):
+                loss = torch.multiply(torch.mean(spatial_epes_min[:, i, :, :]), 1.0) #Scalar for each hyp
+                sum_losses = torch.add(loss, sum_losses)
 
-        return loss, meta_data
+        elif mode == 'epe-all':
+            for i in range(num_hyps):
+                loss = torch.multiply(torch.mean(spatial_epes[:, i, :, :]), 1.0)
+                sum_losses = torch.add(loss, sum_losses)
+
+        return sum_losses
+    
+
+    def make_sampling_loss(self, hyps_stacked, gt, mode='epe', top_n=1):
+        # gt has the shape (batch,2,1,1) which corresponds to the ground-truth future location (x,y)
+        # hyps list of 20 hypotheses each has the shape (batch,2,1,1), this corresponds to the mean of the hypothesis
+        # bounded_log_sigmas list of 20 hypotheses each has the shape (batch,2,1,1), this corresponds to the log sigma of the hypothesis
+        # num_hyps = len(hyps) 
+        # hyps_stacked = torch.stack([h for h in hyps], axis=1) #We suppose that the input hyps are already stacked
+        
+        num_hyps = hyps_stacked.shape[-2]
+        
+        gts = torch.stack([gt for i in range(0, num_hyps)],axis = 1) # (batch, num_hyps, 2, 1, 1)
+        epsillon = 0.05
+        eps = 0.001
+        diff = torch.square(hyps_stacked - gts) # (batch, num_hyps, 2, 1, 1)
+        channels_sum = torch.sum(diff, dim=2) # (batch, num_hyps, 1, 1)
+        spatial_epes = torch.sqrt(channels_sum + eps)  # (batch, num_hyps , 1, 1)
+        sum_losses = torch.constant(0.0)
+
+        if mode == 'epe':
+            spatial_epe = torch.min(spatial_epes, dim=1) #(batch, 1, 1)
+            loss = torch.multiply(torch.mean(spatial_epe), 1.0) # Scalar
+            sum_losses = torch.add(loss, sum_losses) 
+
+        elif mode == 'epe-relaxed':
+            spatial_epe = torch.min(spatial_epes, dim=1) #(batch, 1, 1)
+            loss0 = torch.multiply(torch.mean(spatial_epe), 1 - 2 * epsillon) #Scalar
+
+            for i in range(num_hyps):
+                loss = torch.multiply(torch.mean(spatial_epes[:, i, :, :]), epsillon / (num_hyps)) #Scalar for each hyp
+                sum_losses = torch.add(loss, sum_losses)
+                
+            sum_losses = torch.add(loss0, sum_losses)
+
+        elif mode == 'epe-top-n' and top_n > 1:
+            spatial_epes_transposed = torch.multiply(torch.transpose(spatial_epes, perm=[0, 2, 3, 1]), -1) #(batch, 1 ,1, num_hyps)
+            top_k, indices = torch.topk(input=spatial_epes_transposed, k=top_n, dim=-1) #(batch, 1 ,1, num_hyps) ranked
+            spatial_epes_min = torch.multiply(torch.transpose(top_k, perm=[0, 3, 1, 2]), -1) #(batch, num_hyps, 1, 1)
+            for i in range(top_n):
+                loss = torch.multiply(torch.mean(spatial_epes_min[:, i, :, :]), 1.0) #Scalar for each hyp
+                sum_losses = torch.add(loss, sum_losses)
+
+        elif mode == 'epe-all':
+            for i in range(num_hyps):
+                loss = torch.multiply(torch.mean(spatial_epes[:, i, :, :]), 1.0)
+                sum_losses = torch.add(loss, sum_losses)
+
+        return sum_losses
+    
+        # def forward(self,
+    #             predictions: torch.Tensor,
+    #             targets: torch.Tensor) -> Tuple[torch.Tensor, dict]:
+    #     source_activity_pred, direction_of_arrival_pred, _ = predictions
+    #     source_activity_target, direction_of_arrival_target = targets
+
+    #     source_activity_bce_loss = F.binary_cross_entropy_with_logits(source_activity_pred, source_activity_target)
+
+    #     source_activity_mask = source_activity_target.bool()
+
+    #     spherical_distance = self.compute_spherical_distance(
+    #         direction_of_arrival_pred[source_activity_mask], direction_of_arrival_target[source_activity_mask])
+    #     direction_of_arrival_loss = self.alpha * torch.mean(spherical_distance)
+
+    #     loss = source_activity_bce_loss + direction_of_arrival_loss
+
+    #     meta_data = {
+    #         'source_activity_loss': source_activity_bce_loss,
+    #         'direction_of_arrival_loss': direction_of_arrival_loss
+    #     }
+
+    #     return loss, meta_data
+    
+    
