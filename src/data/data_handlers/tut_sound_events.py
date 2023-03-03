@@ -234,6 +234,10 @@ class TUTSoundEvents(Dataset):
             except:
                 pass
             
+        # print(path_to_feature_file)
+        # print(feature_file_name)
+        # print(target_file_name)
+            
         if os.path.isfile(os.path.join(path_to_feature_file, feature_file_name)):
             with h5py.File(os.path.join(path_to_feature_file, feature_file_name), 'r') as f:
                 audio_features = f['audio_features'][:]

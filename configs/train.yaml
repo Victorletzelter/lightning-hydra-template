@@ -5,7 +5,7 @@
 defaults:
   - _self_
   - data: ansim.yaml
-  - model: pilot.yaml
+  - model: seldnet.yaml
   - callbacks: default.yaml
   - logger: many_loggers.yaml # set logger here or use command line (e.g. `python train.py logger=tensorboard`)
   - trainer: setup.yaml

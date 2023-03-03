@@ -284,3 +284,74 @@ class LocalizationOutput(nn.Module):
         direction_of_arrival = torch.cat((azimuth.unsqueeze(-1), elevation.unsqueeze(-1)), dim=-1)
 
         return source_activity, direction_of_arrival
+
+### Time distributed fully connected layers
+class TimeDistributedFC(nn.Module):
+    """
+    Class for applying time distributed fully connected layers with input tensors 
+    of shape  [N, T, in_features] where N is the batch_size, T is the number of time step,
+    and in_features is the number of input features at each time step. 
+    Output tensors will have shape [N, T, out_features], where out_features is the number 
+    of output features at each time step.
+    """
+    def __init__(self, in_features, out_features):
+        super(TimeDistributedFC, self).__init__()
+        self.linear = nn.Linear(in_features, out_features)
+
+    def forward(self, x):
+        
+        N,T = x.shape[0],x.shape[1]
+        
+        # reshape input tensor to [N*T x B/4]
+        x = x.view(-1, x.shape[-1])
+
+        # apply linear layer to each time step
+        x = self.linear(x)
+
+        # reshape output tensor to [N x T x S]
+        x = x.view(N, T, -1)
+
+        return x       
+
+### MH for multihypothesis.  
+class MHLocalizationOutput(nn.Module):
+    """Implements a module that outputs source activity and direction-of-arrival for sound event localization. An input
+    of fixed dimension is passed through a fully-connected layer and then split into a source activity vector with
+    sigmoid output activations and corresponding azimuth and elevation vectors, which are subsequently combined to a
+    direction-of-arrival output tensor.
+    Args:
+        input_dim: Input dimension.
+        
+        num_hypothesis: Number of hypothesis in the model. (TODOO)
+    """
+    def __init__(self, input_dim: int, num_hypthesis: int):
+        super(LocalizationOutput, self).__init__()
+
+        self.source_activity_output_layers = {}
+        self.azimuth_output_layers = {}
+        self.elevation_output_layers = {}
+        self.num_hypothesis = num_hypthesis
+        
+        for i in range(self.num_hypothesis) :  
+            self.azimuth_output_layers['hyp_'+'{}'.format(i)] = TimeDistributedFC(input_dim, self.num_hypothesis)
+            self.elevation_output_layers['hyp_'+'{}'.format(i)] = TimeDistributedFC(input_dim, self.num_hypothesis)
+
+    def forward(self,
+                input: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Model forward pass.
+
+        :param input: Input tensor with dimensions [NxTxD], where N is the batch size, T is the number of time steps per
+                    chunk and D is the input dimension.
+        :return: Tuple containing the source activities dictionnary of source activity tensors of size [NxTxS] 
+        and the directions_of_arrival dictionnary of diction-of-arrival tensors with
+                dimensions [NxTxSx2], where S is the maximum number of sources.
+        """  
+        source_activities = {}
+        directions_of_arrival = {}
+        
+        for i in range(self.num_hypothesis) :
+            azimuth = self.azimuth_output_layers['hyp_'+'{}'.format(i)](input)
+            elevation = self.elevation_output_layers['hyp_'+'{}'.format(i)](input)
+            directions_of_arrival['hyp_'+'{}'.format(i)] = torch.cat((azimuth.unsqueeze(-1), elevation.unsqueeze(-1)), dim=-1)
+
+        return source_activities, directions_of_arrival

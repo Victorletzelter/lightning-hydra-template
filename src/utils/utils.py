@@ -376,3 +376,67 @@ def psel_loss(predictions: Tuple[Tensor, Tensor, Tensor],
         }
 
     return source_activity_loss + alpha * direction_of_arrival_loss + beta * kld_loss, meta_data
+
+### Custom loss here 
+
+class MHSELLoss(_Loss):
+    """Custom sound event localization (SEL) loss function, which returns the sum of the binary cross-entropy loss
+    regarding the estimated number of sources at each time-step and the minimum direction-of-arrival mean squared error
+    loss, calculated according to all possible combinations of active sources."""
+
+    __constants__ = ['reduction']
+
+    def __init__(self,
+                 max_num_sources: int,
+                 alpha: float = 1.0,
+                 num_hypothesis: int = 1,
+                 size_average=None,
+                 reduce=None,
+                 reduction='mean') -> None:
+        super(MHSELLoss, self).__init__(size_average, reduce, reduction)
+
+        if (alpha < 0) or (alpha > 1):
+            assert ValueError('The weighting parameter must be a number between 0 and 1.')
+
+        self.alpha = alpha
+        self.permutations = torch.from_numpy(np.array(list(permutations(range(max_num_sources)))))
+        self.num_permutations = self.permutations.shape[0]
+
+    @staticmethod
+    def compute_spherical_distance(y_pred: torch.Tensor,
+                                   y_true: torch.Tensor) -> torch.Tensor:
+        if (y_pred.shape[-1] != 2) or (y_true.shape[-1] != 2):
+            assert RuntimeError('Input tensors require a dimension of two.')
+
+        sine_term = torch.sin(y_pred[:, 0]) * torch.sin(y_true[:, 0])
+        cosine_term = torch.cos(y_pred[:, 0]) * torch.cos(y_true[:, 0]) * torch.cos(y_true[:, 1] - y_pred[:, 1])
+
+        return torch.acos(F.hardtanh(sine_term + cosine_term, min_val=-1, max_val=1))
+    
+    def forward(MHpredictions: Dict[str, torch.Tensor],
+                targets: torch.Tensor) :
+        MHsource_activity_pred, MHdirection_of_arrival_pred, _ = MHpredictions
+        source_activity_target, direction_of_arrival_target = targets
+
+    def forward(self,
+                predictions: torch.Tensor,
+                targets: torch.Tensor) -> Tuple[torch.Tensor, dict]:
+        source_activity_pred, direction_of_arrival_pred, _ = predictions
+        source_activity_target, direction_of_arrival_target = targets
+
+        source_activity_bce_loss = F.binary_cross_entropy_with_logits(source_activity_pred, source_activity_target)
+
+        source_activity_mask = source_activity_target.bool()
+
+        spherical_distance = self.compute_spherical_distance(
+            direction_of_arrival_pred[source_activity_mask], direction_of_arrival_target[source_activity_mask])
+        direction_of_arrival_loss = self.alpha * torch.mean(spherical_distance)
+
+        loss = source_activity_bce_loss + direction_of_arrival_loss
+
+        meta_data = {
+            'source_activity_loss': source_activity_bce_loss,
+            'direction_of_arrival_loss': direction_of_arrival_loss
+        }
+
+        return loss, meta_data

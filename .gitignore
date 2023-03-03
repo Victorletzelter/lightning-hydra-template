@@ -153,5 +153,9 @@ configs/local/default.yaml
 
 #Tmp files
 /tmp/
+/tmp-logs-adrenaline/
+/tmp-logs-pilot/
+/src/tmp/
+/src/__pycache__/
 
 
