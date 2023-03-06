@@ -152,8 +152,8 @@ class AbstractLocalizationModule(ptl.LightningModule, abc.ABC):
             _results = {'frame_recall' : [], 'doa_error' : []} 
 
             for seq_idx in range(num_sequences):
-                _results['frame_recall'].append(frame_recall[seq_idx])
-                _results['doa_error'].append(doa_error[seq_idx])
+                _results['frame_recall'].append(float(frame_recall[seq_idx]))
+                _results['doa_error'].append(float(doa_error[seq_idx]))
                 
             data_frame = pd.DataFrame.from_dict(_results)
             
@@ -163,10 +163,11 @@ class AbstractLocalizationModule(ptl.LightningModule, abc.ABC):
             _results['model']=self.hparams['name']
             _results['dataset']=dataset_name
             _results['fold_idx']=self.cv_fold_idx
-            _results['average_frame_recall'] = average_frame_recall
-            _results['average_doa_error'] = average_doa_error
+            _results['average_frame_recall'] = float(average_frame_recall)
+            _results['average_doa_error'] = float(average_doa_error)
             
-            results_file = os.path.join(self.hparams['results_dir'],
+            results_file = os.path.join(self.hparams['results_dir'], self.hparams['name'] + '_'
+                                        + dataset_name + '_' + 'fold' + str(self.cv_fold_idx) + '_'
                                     'max_sources'+ str(self.max_num_sources) +  '_' +
                                     'num_test_samples'+ str(len(data_frame['frame_recall'])) + '_'
                                     + '.json')

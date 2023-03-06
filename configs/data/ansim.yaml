@@ -7,6 +7,6 @@ sequence_duration: 30
 chunk_length: 0.5
 frame_length: 0.04
 num_fft_bins: 2048
-max_num_sources: 1
-num_overlapping_sources: 1
+max_num_sources: 1 # In the model output
+num_overlapping_sources: 1 # In the data choice
 num_workers: 32

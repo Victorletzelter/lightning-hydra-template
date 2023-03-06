@@ -32,7 +32,6 @@ class TUTSoundEventsDataModule(pl.LightningDataModule):
             self.max_num_overlapping_sources_test = kwargs['max_num_overlapping_sources_test']
             
         else : 
-            print('OK')
             self.max_num_overlapping_sources_test = self.num_overlapping_sources
 
     def prepare_data(self):

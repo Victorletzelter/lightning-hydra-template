@@ -189,17 +189,6 @@ class TUTSoundEvents(Dataset):
 
             events_in_chunk = annotations[event_mask]
             num_active_sources = len(events_in_chunk)
-            
-            if events_in_chunk[['azimuth', 'elevation']].to_numpy().shape == (2,2) :
-                print("SHAPE (2,2) !")
-                print(annotation_file)
-                print(num_active_sources)
-                print(events_in_chunk)
-                
-            if num_active_sources==2 :
-                print("2 sources !!!")
-                print(annotation_file)
-                print(events_in_chunk)
 
             if num_active_sources > 0:
                 source_activity[frame_idx, :num_active_sources] = 1
@@ -245,10 +234,6 @@ class TUTSoundEvents(Dataset):
                 os.makedirs(path_to_feature_file)
             except:
                 pass
-            
-        # print(path_to_feature_file)
-        # print(feature_file_name)
-        # print(target_file_name)
             
         if os.path.isfile(os.path.join(path_to_feature_file, feature_file_name)):
             with h5py.File(os.path.join(path_to_feature_file, feature_file_name), 'r') as f:
