@@ -8,7 +8,7 @@ defaults:
   - model: cnn.yaml
   - callbacks: default.yaml
   - logger: many_loggers.yaml # set logger here or use command line (e.g. `python train.py logger=tensorboard`)
-  - trainer: setup.yaml
+  - trainer: default.yaml
   - paths: default.yaml
   - extras: default.yaml
   - hydra: default.yaml
