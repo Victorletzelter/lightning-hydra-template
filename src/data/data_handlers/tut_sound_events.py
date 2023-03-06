@@ -189,9 +189,21 @@ class TUTSoundEvents(Dataset):
 
             events_in_chunk = annotations[event_mask]
             num_active_sources = len(events_in_chunk)
+            
+            if events_in_chunk[['azimuth', 'elevation']].to_numpy().shape == (2,2) :
+                print("SHAPE (2,2) !")
+                print(annotation_file)
+                print(num_active_sources)
+                print(events_in_chunk)
+                
+            if num_active_sources==2 :
+                print("2 sources !!!")
+                print(annotation_file)
+                print(events_in_chunk)
 
             if num_active_sources > 0:
                 source_activity[frame_idx, :num_active_sources] = 1
+                
                 direction_of_arrival[frame_idx, :num_active_sources, :] = np.deg2rad(
                     events_in_chunk[['azimuth', 'elevation']].to_numpy())
 

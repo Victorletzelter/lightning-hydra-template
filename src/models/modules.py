@@ -22,6 +22,13 @@ class AbstractLocalizationModule(ptl.LightningModule, abc.ABC):
         self.cv_fold_idx = cv_fold_idx
 
         self._hparams = hparams
+        
+        if 'max_num_overlapping_sources_test' in hparams :
+            self.max_num_overlapping_sources_test = hparams['max_num_overlapping_sources_test']
+            
+        else : 
+            print('OKAY')
+            self.max_num_overlapping_sources_test = hparams['max_num_sources']
          
         self.loss_function = self.get_loss_function()
         
@@ -83,7 +90,7 @@ class AbstractLocalizationModule(ptl.LightningModule, abc.ABC):
     def test_step(self,
                   batch: Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]],
                   batch_idx: int,
-                  dataset_idx: int) -> Dict:
+                  dataset_idx: int = 0) -> Dict:
         predictions, targets = self._process_batch(batch)
 
         output = {
@@ -104,10 +111,27 @@ class AbstractLocalizationModule(ptl.LightningModule, abc.ABC):
         }
 
         num_subsets = len(outputs)
+        
+        if num_subsets > 1 : 
 
-        for subset_idx in range(num_subsets):
-            frame_recall = torch.stack([x['test_frame_recall'] for x in outputs[subset_idx]]).detach().cpu().numpy()
-            doa_error = torch.stack([x['test_doa_error'] for x in outputs[subset_idx]]).detach().cpu().numpy()
+            for subset_idx in range(num_subsets):
+                frame_recall = torch.stack([x['test_frame_recall'] for x in outputs[subset_idx]]).detach().cpu().numpy()
+                doa_error = torch.stack([x['test_doa_error'] for x in outputs[subset_idx]]).detach().cpu().numpy()
+
+                num_sequences = len(frame_recall)
+
+                for seq_idx in range(num_sequences):
+                    results['model'].append(self.hparams['name'])
+                    results['dataset'].append(dataset_name)
+                    results['fold_idx'].append(self.cv_fold_idx)
+                    results['subset_idx'].append(subset_idx)
+                    results['frame_recall'].append(frame_recall[seq_idx])
+                    results['doa_error'].append(doa_error[seq_idx])
+                    
+        else : 
+            
+            frame_recall = torch.stack([x['test_frame_recall'] for x in outputs]).detach().cpu().numpy()
+            doa_error = torch.stack([x['test_doa_error'] for x in outputs]).detach().cpu().numpy()
 
             num_sequences = len(frame_recall)
 
@@ -115,7 +139,7 @@ class AbstractLocalizationModule(ptl.LightningModule, abc.ABC):
                 results['model'].append(self.hparams['name'])
                 results['dataset'].append(dataset_name)
                 results['fold_idx'].append(self.cv_fold_idx)
-                results['subset_idx'].append(subset_idx)
+                results['subset_idx'].append(0)
                 results['frame_recall'].append(frame_recall[seq_idx])
                 results['doa_error'].append(doa_error[seq_idx])
 
@@ -170,7 +194,7 @@ class AbstractLocalizationModule(ptl.LightningModule, abc.ABC):
 
         test_loaders = []
 
-        for num_overlapping_sources in range(1, 4):
+        for num_overlapping_sources in range(1, self.max_num_overlapping_sources_test+1):
             test_dataset = TUTSoundEvents(self.dataset_path, split='test',
                                           tmp_dir=self.hparams['tmp_dir'],
                                           test_fold_idx=self.cv_fold_idx,

@@ -3,9 +3,9 @@
 defaults:
   - _self_
   - data: ansim.yaml # choose datamodule with `test_dataloader()` for evaluation
-  - model: adrenaline.yaml
+  - model: cnn.yaml
   - logger: null
-  - trainer: default.yaml
+  - trainer: setup.yaml
   - paths: default.yaml
   - extras: default.yaml
   - hydra: default.yaml
@@ -15,4 +15,4 @@ task_name: "eval"
 tags: ["dev"]
 
 # passing checkpoint path is necessary for evaluation
-ckpt_path: ???
+ckpt_path: /root/workspace/lightning-hydra-template/logs/train/runs/2023-03-03_18-43-29/checkpoints/epoch_009.ckpt
