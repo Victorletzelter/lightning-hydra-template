@@ -438,13 +438,14 @@ class MHSELLoss(_Loss):
         
         source_activity_target_t #Shape [batch,Max_sources]
         direction_of_arrival_target_t #Shape [batch,Max_sources,2]
-        filling_value = torch.tensor([1000,1000])
+        filling_value = torch.tensor([1000,1000]) #Tensors of large number (on purpose) ; computational trick to not considers the errors values
+        # whenever the sources are not active.
         num_hyps = hyps_stacked_t.shape[1]
         batch = source_activity_target_t.shape[0]
         Max_sources = source_activity_target_t.shape[1]
         
-        #1st padding related to the inactive sources not considered in the error calculation (with high error values)
-        direction_of_arrival_target_t[source_activity_target_t == 0, :, :] = filling_value
+        #1st padding related to the inactive sources, not considered in the error calculation (with high error values)
+        direction_of_arrival_target_t[source_activity_target_t == 0, :, :] = filling_value #Shape [batch,Max_sources,2]
         
         #2nd padding related for the Max_sources dimension set to the number of hypothesis
         gts = torch.nn.functional.pad(input = direction_of_arrival_target_t, pad = (0,0,0,num_hyps-Max_sources),value=filling_value)

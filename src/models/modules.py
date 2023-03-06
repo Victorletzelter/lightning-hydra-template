@@ -109,10 +109,12 @@ class AbstractLocalizationModule(ptl.LightningModule, abc.ABC):
         results = {
             'model': [], 'dataset': [], 'fold_idx': [], 'subset_idx': [], 'frame_recall': [], 'doa_error': []
         }
-
-        num_subsets = len(outputs)
         
-        if num_subsets > 1 : 
+        #We check whether outputs if a list of List[Dict] (case with several subsets) or if it is a list of dicts (case of one subset)  
+               
+        if len(outputs)>0 and isinstance(outputs[0],list) : 
+            
+            num_subsets = len(outputs)
 
             for subset_idx in range(num_subsets):
                 frame_recall = torch.stack([x['test_frame_recall'] for x in outputs[subset_idx]]).detach().cpu().numpy()
@@ -128,7 +130,9 @@ class AbstractLocalizationModule(ptl.LightningModule, abc.ABC):
                     results['frame_recall'].append(frame_recall[seq_idx])
                     results['doa_error'].append(doa_error[seq_idx])
                     
-        else : 
+            print(results['frame_recall'])
+                    
+        elif len(outputs)>0 and isinstance(outputs[0],dict) : 
             
             frame_recall = torch.stack([x['test_frame_recall'] for x in outputs]).detach().cpu().numpy()
             doa_error = torch.stack([x['test_doa_error'] for x in outputs]).detach().cpu().numpy()
@@ -142,6 +146,8 @@ class AbstractLocalizationModule(ptl.LightningModule, abc.ABC):
                 results['subset_idx'].append(0)
                 results['frame_recall'].append(frame_recall[seq_idx])
                 results['doa_error'].append(doa_error[seq_idx])
+                
+            print(results['frame_recall'])
 
         data_frame = pd.DataFrame.from_dict(results)
 
@@ -358,10 +364,10 @@ class MHLocalizationOutput(nn.Module):
         self.num_hypothesis = num_hypthesis
         self.output_dim = output_dim
         
-        for i in range(self.num_hypothesis) :  
+        for k in range(self.num_hypothesis) :  
             # self.azimuth_output_layers['hyp_'+'{}'.format(i)] = TimeDistributedFC(input_dim, self.num_hypothesis)
             # self.elevation_output_layers['hyp_'+'{}'.format(i)] = TimeDistributedFC(input_dim, self.num_hypothesis)
-            self.doa_layers['hyp_'+'{}'.format(i)] = TimeDistributedFC(input_dim, output_dim)
+            self.doa_layers['hyp_'+'{}'.format(k)] = TimeDistributedFC(input_dim, output_dim)
             
         ### OR 
         # self.doa_layers = TimeDistributedFC(input_dim, self.num_hypothesis*2) #if output_dim=2
@@ -372,12 +378,12 @@ class MHLocalizationOutput(nn.Module):
 
         :param input: Input tensor with dimensions [NxTxD], where N is the batch size, T is the number of time steps per
                     chunk and D is the input dimension.
-        :return: Stacked direciton of arrival hypothesis with shape NxTxself.num_hypothesisxoutput_dim. 
+        :return: Stacked direciton of arrival hypothesis with shape [NxTxself.num_hypothesisxoutput_dim]
         """  
         directions_of_arrival = []
         
-        for i in range(self.num_hypothesis) :
-            directions_of_arrival.append(self.doa_layers['hyp_'+'{}'.format(i)](input)) # Size [NxTx2]
+        for k in range(self.num_hypothesis) :
+            directions_of_arrival.append(self.doa_layers['hyp_'+'{}'.format(k)](input)) # Size [NxTx2]
             
         hyp_stacked = torch.stack(directions_of_arrival, dim=-2) #Shape [NxTxself.num_hypothesisx2]
 
