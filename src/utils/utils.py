@@ -460,20 +460,11 @@ class MHSELLoss(_Loss):
         spatial_epes = torch.sqrt(channels_sum + eps)  # (batch, num_hyps , 1, 1)
 
         ### With spherical distance
-        
-        # V1 
-        hyps_stacked_t = hyps_stacked_t.view(-1,2)
-        gts = gts.view(-1,2)
+        hyps_stacked_t = hyps_stacked_t.view(-1,2) #Shape (batch*num_hyps,2)
+        gts = gts.view(-1,2) #Shape (batch*num_hyps,2)
         diff = compute_spherical_distance(hyps_stacked_t,gts)
-        diff = diff.view(batch,num_hyps)
-        diff = diff.unsqueeze(2).unsqueeze(3).unsqueeze(4)
-        # V2
-        # hyps_stacked_t of shape (batch,num_hyps,2), gts of shape (batch, num_hyps, 2)
-        # Compute the diff tensor using tensor operations
-        sine_term = torch.sin(hyps_stacked_t[:, :, 0]) * torch.sin(gts[:, :, 0])  # (batch, num_hyps)
-        cosine_term = torch.cos(hyps_stacked_t[:, :, 0]) * torch.cos(gts[:, :, 0]) * torch.cos(gts[:, :, 1] - hyps_stacked_t[:, :, 1])  # (batch, num_hyps)
-        diff = torch.acos(torch.clamp(sine_term + cosine_term, min=-1, max=1))  # (batch, num_hyps)
-        spatial_epes = diff.unsqueeze(2).unsqueeze(3).unsqueeze(4)  # (batch, num_hyps, 1, 1, 1) 
+        diff = diff.view(batch,num_hyps) # Shape (batch,num_hyps)
+        spatial_epes = diff.unsqueeze(2).unsqueeze(3).unsqueeze(4) # Shape (batch,num_hyps,1,1,1)
         
         sum_losses = torch.constant(0.0)
 
@@ -487,7 +478,7 @@ class MHSELLoss(_Loss):
             loss0 = torch.multiply(torch.mean(spatial_epe), 1 - 2 * epsillon) #Scalar (average with coefficient)
 
             for i in range(num_hyps):
-                loss = torch.multiply(torch.mean(spatial_epes[:, i, :, :]), epsillon / (num_hyps)) #Scalar for each hyp
+                loss = torch.multiply(torch.mean(spatial_epes[:, i, :, :]), epsillon / (num_hyps-1)) #Scalar for each hyp
                 sum_losses = torch.add(loss, sum_losses)
                 
             sum_losses = torch.add(loss0, sum_losses)

@@ -12,7 +12,7 @@ import torch.optim as optim
 from torch.optim.lr_scheduler import LambdaLR
 from torch.utils.data import DataLoader
 from typing import Dict, List, Tuple
-
+import json
 
 class AbstractLocalizationModule(ptl.LightningModule, abc.ABC):
     def __init__(self, dataset_path: str, cv_fold_idx: int, hparams):
@@ -22,13 +22,13 @@ class AbstractLocalizationModule(ptl.LightningModule, abc.ABC):
         self.cv_fold_idx = cv_fold_idx
 
         self._hparams = hparams
+        self.max_num_sources = hparams['max_num_sources']
         
         if 'max_num_overlapping_sources_test' in hparams :
             self.max_num_overlapping_sources_test = hparams['max_num_overlapping_sources_test']
             
         else : 
-            print('OKAY')
-            self.max_num_overlapping_sources_test = hparams['max_num_sources']
+            self.max_num_overlapping_sources_test = self.max_num_sources
          
         self.loss_function = self.get_loss_function()
         
@@ -104,7 +104,6 @@ class AbstractLocalizationModule(ptl.LightningModule, abc.ABC):
                        outputs: List) -> None:
         dataset_name = os.path.split(self.dataset_path)[-1]
         model_name = '_'.join([self.hparams['name'], dataset_name, 'fold' + str(self.cv_fold_idx)])
-        results_file = os.path.join(self.hparams['results_dir'], model_name + '.json')
 
         results = {
             'model': [], 'dataset': [], 'fold_idx': [], 'subset_idx': [], 'frame_recall': [], 'doa_error': []
@@ -130,7 +129,18 @@ class AbstractLocalizationModule(ptl.LightningModule, abc.ABC):
                     results['frame_recall'].append(frame_recall[seq_idx])
                     results['doa_error'].append(doa_error[seq_idx])
                     
-            print(results['frame_recall'])
+            data_frame = pd.DataFrame.from_dict(results)
+            
+            average_frame_recall = torch.tensor(data_frame['frame_recall'].mean(), dtype=torch.float32)
+            average_doa_error = torch.tensor(data_frame['doa_error'].mean(), dtype=torch.float32)
+            
+            results_file = os.path.join(self.hparams['results_dir'],
+                                        'max_sources'+ str(self.max_num_sources) +  '_' +
+                                        'num_test_samples'+ str(len(data_frame['frame_recall'])) + '_'
+                                        + '.json')
+
+            if not os.path.isfile(results_file):
+                data_frame.to_json(results_file)
                     
         elif len(outputs)>0 and isinstance(outputs[0],dict) : 
             
@@ -138,24 +148,32 @@ class AbstractLocalizationModule(ptl.LightningModule, abc.ABC):
             doa_error = torch.stack([x['test_doa_error'] for x in outputs]).detach().cpu().numpy()
 
             num_sequences = len(frame_recall)
+            
+            _results = {'frame_recall' : [], 'doa_error' : []} 
 
             for seq_idx in range(num_sequences):
-                results['model'].append(self.hparams['name'])
-                results['dataset'].append(dataset_name)
-                results['fold_idx'].append(self.cv_fold_idx)
-                results['subset_idx'].append(0)
-                results['frame_recall'].append(frame_recall[seq_idx])
-                results['doa_error'].append(doa_error[seq_idx])
+                _results['frame_recall'].append(frame_recall[seq_idx])
+                _results['doa_error'].append(doa_error[seq_idx])
                 
-            print(results['frame_recall'])
-
-        data_frame = pd.DataFrame.from_dict(results)
-
-        if not os.path.isfile(results_file):
-            data_frame.to_json(results_file)
-
-        average_frame_recall = torch.tensor(data_frame['frame_recall'].mean(), dtype=torch.float32)
-        average_doa_error = torch.tensor(data_frame['doa_error'].mean(), dtype=torch.float32)
+            data_frame = pd.DataFrame.from_dict(_results)
+            
+            average_frame_recall = torch.tensor(data_frame['frame_recall'].mean(), dtype=torch.float32)
+            average_doa_error = torch.tensor(data_frame['doa_error'].mean(), dtype=torch.float32)
+            
+            _results['model']=self.hparams['name']
+            _results['dataset']=dataset_name
+            _results['fold_idx']=self.cv_fold_idx
+            _results['average_frame_recall'] = average_frame_recall
+            _results['average_doa_error'] = average_doa_error
+            
+            results_file = os.path.join(self.hparams['results_dir'],
+                                    'max_sources'+ str(self.max_num_sources) +  '_' +
+                                    'num_test_samples'+ str(len(data_frame['frame_recall'])) + '_'
+                                    + '.json')
+            
+            if not os.path.isfile(results_file):
+                with open(str(results_file),'w') as file : 
+                    json.dump(_results, file)
 
         self.log_dict({'test_frame_recall': average_frame_recall, 'test_doa_error': average_doa_error})
 

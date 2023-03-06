@@ -6,6 +6,9 @@ from omegaconf import DictConfig
 from pytorch_lightning import LightningDataModule, LightningModule, Trainer
 from pytorch_lightning.loggers import Logger
 
+import os
+import logging
+
 pyrootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 # ------------------------------------------------------------------------------------ #
 # the setup_root above is equivalent to:
@@ -82,6 +85,25 @@ def evaluate(cfg: DictConfig) -> Tuple[dict, dict]:
 
 @hydra.main(version_base="1.3", config_path="../configs", config_name="eval.yaml")
 def main(cfg: DictConfig) -> None:
+    
+    # create a console output log file in the output directory newly created
+    
+    # set the log level
+    log.setLevel("DEBUG")
+
+    # create a file handler with the specified log file path
+    file_handler = logging.FileHandler(filename=os.path.join(str(cfg.paths.output_dir),'eval.log'))
+
+    # set the log level for the file handler
+    file_handler.setLevel(logging.DEBUG)
+
+    # create a formatter and add it to the file handler
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    file_handler.setFormatter(formatter)
+
+    # add the file handler to the log
+    log.addHandler(file_handler)
+    
     evaluate(cfg)
 
 
