@@ -18,6 +18,7 @@ import pandas as pd
 from torch.optim.lr_scheduler import LambdaLR
 from torch.utils.data import DataLoader
 from typing import Dict, List, Tuple
+import json
 
 class AbstractLocalizationModule(ptl.LightningModule, abc.ABC):
     def __init__(self, dataset_path: str, cv_fold_idx: int, hparams):
@@ -27,6 +28,13 @@ class AbstractLocalizationModule(ptl.LightningModule, abc.ABC):
         self.cv_fold_idx = cv_fold_idx
 
         self._hparams = hparams
+        self.max_num_sources = hparams['max_num_sources']
+        
+        if 'max_num_overlapping_sources_test' in hparams :
+            self.max_num_overlapping_sources_test = hparams['max_num_overlapping_sources_test']
+            
+        else : 
+            self.max_num_overlapping_sources_test = self.max_num_sources
          
         self.loss_function = self.get_loss_function()
         
@@ -88,7 +96,7 @@ class AbstractLocalizationModule(ptl.LightningModule, abc.ABC):
     def test_step(self,
                   batch: Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]],
                   batch_idx: int,
-                  dataset_idx: int) -> Dict:
+                  dataset_idx: int = 0) -> Dict:
         predictions, targets = self._process_batch(batch)
 
         output = {
@@ -97,42 +105,123 @@ class AbstractLocalizationModule(ptl.LightningModule, abc.ABC):
         self.log_dict(output)
 
         return output
-
+    
     def test_epoch_end(self,
                        outputs: List) -> None:
         dataset_name = os.path.split(self.dataset_path)[-1]
         model_name = '_'.join([self.hparams['name'], dataset_name, 'fold' + str(self.cv_fold_idx)])
-        results_file = os.path.join(self.hparams['results_dir'], model_name + '.json')
 
         results = {
             'model': [], 'dataset': [], 'fold_idx': [], 'subset_idx': [], 'frame_recall': [], 'doa_error': []
         }
+        
+        #We check whether outputs if a list of List[Dict] (case with several subsets) or if it is a list of dicts (case of one subset)  
+               
+        if len(outputs)>0 and isinstance(outputs[0],list) : 
+            
+            num_subsets = len(outputs)
 
-        num_subsets = len(outputs)
+            for subset_idx in range(num_subsets):
+                frame_recall = torch.stack([x['test_frame_recall'] for x in outputs[subset_idx]]).detach().cpu().numpy()
+                doa_error = torch.stack([x['test_doa_error'] for x in outputs[subset_idx]]).detach().cpu().numpy()
 
-        for subset_idx in range(num_subsets):
-            frame_recall = torch.stack([x['test_frame_recall'] for x in outputs[subset_idx]]).detach().cpu().numpy()
-            doa_error = torch.stack([x['test_doa_error'] for x in outputs[subset_idx]]).detach().cpu().numpy()
+                num_sequences = len(frame_recall)
+
+                for seq_idx in range(num_sequences):
+                    results['model'].append(self.hparams['name'])
+                    results['dataset'].append(dataset_name)
+                    results['fold_idx'].append(self.cv_fold_idx)
+                    results['subset_idx'].append(subset_idx)
+                    results['frame_recall'].append(frame_recall[seq_idx])
+                    results['doa_error'].append(doa_error[seq_idx])
+                    
+            data_frame = pd.DataFrame.from_dict(results)
+            
+            average_frame_recall = torch.tensor(data_frame['frame_recall'].mean(), dtype=torch.float32)
+            average_doa_error = torch.tensor(data_frame['doa_error'].mean(), dtype=torch.float32)
+            
+            results_file = os.path.join(self.hparams['results_dir'],
+                                        'max_sources'+ str(self.max_num_sources) +  '_' +
+                                        'num_test_samples'+ str(len(data_frame['frame_recall'])) + '_'
+                                        + '.json')
+
+            if not os.path.isfile(results_file):
+                data_frame.to_json(results_file)
+                    
+        elif len(outputs)>0 and isinstance(outputs[0],dict) : 
+            
+            frame_recall = torch.stack([x['test_frame_recall'] for x in outputs]).detach().cpu().numpy()
+            doa_error = torch.stack([x['test_doa_error'] for x in outputs]).detach().cpu().numpy()
 
             num_sequences = len(frame_recall)
+            
+            _results = {'frame_recall' : [], 'doa_error' : []} 
 
             for seq_idx in range(num_sequences):
-                results['model'].append(self.hparams['name'])
-                results['dataset'].append(dataset_name)
-                results['fold_idx'].append(self.cv_fold_idx)
-                results['subset_idx'].append(subset_idx)
-                results['frame_recall'].append(frame_recall[seq_idx])
-                results['doa_error'].append(doa_error[seq_idx])
-
-        data_frame = pd.DataFrame.from_dict(results)
-
-        if not os.path.isfile(results_file):
-            data_frame.to_json(results_file)
-
-        average_frame_recall = torch.tensor(data_frame['frame_recall'].mean(), dtype=torch.float32)
-        average_doa_error = torch.tensor(data_frame['doa_error'].mean(), dtype=torch.float32)
+                _results['frame_recall'].append(float(frame_recall[seq_idx]))
+                _results['doa_error'].append(float(doa_error[seq_idx]))
+                
+            data_frame = pd.DataFrame.from_dict(_results)
+            
+            average_frame_recall = torch.tensor(data_frame['frame_recall'].mean(), dtype=torch.float32)
+            average_doa_error = torch.tensor(data_frame['doa_error'].mean(), dtype=torch.float32)
+            
+            _results['model']=self.hparams['name']
+            _results['dataset']=dataset_name
+            _results['fold_idx']=self.cv_fold_idx
+            _results['average_frame_recall'] = float(average_frame_recall)
+            _results['average_doa_error'] = float(average_doa_error)
+            
+            results_file = os.path.join(self.hparams['results_dir'], self.hparams['name'] + '_'
+                                        + dataset_name + '_' + 'fold' + str(self.cv_fold_idx) + '_'
+                                    'max_sources'+ str(self.max_num_sources) +  '_' +
+                                    'num_test_samples'+ str(len(data_frame['frame_recall'])) + '_'
+                                    + '.json')
+            
+            if not os.path.isfile(results_file):
+                with open(str(results_file),'w') as file : 
+                    json.dump(_results, file)
 
         self.log_dict({'test_frame_recall': average_frame_recall, 'test_doa_error': average_doa_error})
+
+
+    ### TO DELETE 
+    
+    # def test_epoch_end(self, 
+    #                    outputs: List) -> None:
+    #     dataset_name = os.path.split(self.dataset_path)[-1]
+    #     model_name = '_'.join([self.hparams['name'], dataset_name, 'fold' + str(self.cv_fold_idx)])
+    #     results_file = os.path.join(self.hparams['results_dir'], model_name + '.json')
+
+    #     results = {
+    #         'model': [], 'dataset': [], 'fold_idx': [], 'subset_idx': [], 'frame_recall': [], 'doa_error': []
+    #     }
+
+    #     num_subsets = len(outputs)
+
+    #     for subset_idx in range(num_subsets):
+    #         frame_recall = torch.stack([x['test_frame_recall'] for x in outputs[subset_idx]]).detach().cpu().numpy()
+    #         doa_error = torch.stack([x['test_doa_error'] for x in outputs[subset_idx]]).detach().cpu().numpy()
+
+    #         num_sequences = len(frame_recall)
+
+    #         for seq_idx in range(num_sequences):
+    #             results['model'].append(self.hparams['name'])
+    #             results['dataset'].append(dataset_name)
+    #             results['fold_idx'].append(self.cv_fold_idx)
+    #             results['subset_idx'].append(subset_idx)
+    #             results['frame_recall'].append(frame_recall[seq_idx])
+    #             results['doa_error'].append(doa_error[seq_idx])
+
+    #     data_frame = pd.DataFrame.from_dict(results)
+
+    #     if not os.path.isfile(results_file):
+    #         data_frame.to_json(results_file)
+
+    #     average_frame_recall = torch.tensor(data_frame['frame_recall'].mean(), dtype=torch.float32)
+    #     average_doa_error = torch.tensor(data_frame['doa_error'].mean(), dtype=torch.float32)
+
+    #     self.log_dict({'test_frame_recall': average_frame_recall, 'test_doa_error': average_doa_error})
 
     def _process_batch(self,
                        batch: Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]
@@ -175,7 +264,7 @@ class AbstractLocalizationModule(ptl.LightningModule, abc.ABC):
 
         test_loaders = []
 
-        for num_overlapping_sources in range(1, 4):
+        for num_overlapping_sources in range(1, min(self.max_num_overlapping_sources_test,3)):
             test_dataset = TUTSoundEvents(self.dataset_path, split='test',
                                           tmp_dir=self.hparams['tmp_dir'],
                                           test_fold_idx=self.cv_fold_idx,

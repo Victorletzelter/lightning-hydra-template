@@ -219,7 +219,7 @@ class AbstractLocalizationModule(ptl.LightningModule, abc.ABC):
 
         test_loaders = []
 
-        for num_overlapping_sources in range(1, self.max_num_overlapping_sources_test+1):
+        for num_overlapping_sources in range(1, min(self.max_num_overlapping_sources_test,3)+1):
             test_dataset = TUTSoundEvents(self.dataset_path, split='test',
                                           tmp_dir=self.hparams['tmp_dir'],
                                           test_fold_idx=self.cv_fold_idx,

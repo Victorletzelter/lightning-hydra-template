@@ -1,1 +1,0 @@
-{"frame_recall": [0.3687500059604645], "doa_error": [NaN], "model": "CNN", "dataset": "ansim", "fold_idx": 1, "average_frame_recall": 0.3687500059604645, "average_doa_error": NaN}

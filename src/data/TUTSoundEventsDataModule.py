@@ -32,7 +32,7 @@ class TUTSoundEventsDataModule(pl.LightningDataModule):
             self.max_num_overlapping_sources_test = kwargs['max_num_overlapping_sources_test']
             
         else : 
-            self.max_num_overlapping_sources_test = self.num_overlapping_sources
+            self.max_num_overlapping_sources_test = self.max_num_sources
 
     def prepare_data(self):
         # Download data if needed
@@ -72,7 +72,7 @@ class TUTSoundEventsDataModule(pl.LightningDataModule):
 
         test_loaders = []
 
-        for num_overlapping_sources in range(1, self.max_num_overlapping_sources_test+1):
+        for num_overlapping_sources in range(1, min(self.max_num_overlapping_sources_test,3)+1):
             test_dataset = TUTSoundEvents(self.root,  tmp_dir = self.tmp_dir, test_fold_idx=self.test_fold_idx,
                                         sequence_duration=self.sequence_duration, chunk_length=self.chunk_length,
                                         frame_length=self.frame_length, num_fft_bins=self.num_fft_bins,
