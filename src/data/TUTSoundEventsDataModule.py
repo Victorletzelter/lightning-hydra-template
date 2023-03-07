@@ -15,6 +15,22 @@ class TUTSoundEventsDataModule(pl.LightningDataModule):
                  batch_size: int = 32,
                  num_workers: int = 16,
                  **kwargs):
+        """Data module associated with the TUT Sound Event Datasets (Ansim, resim and real).
+
+        Args:
+            root (str): Dataset folder absolute path. 
+            tmp_dir (str, optional): Folder for storing temporary files, i.e., the audio features and labels in each chunks. Defaults to './tmp'.
+            test_fold_idx (int, optional): Choice of the cross-validation folder, i.e., the index of the folder (1,2 or 3) on which the testing will be performed. Defaults to 1.
+            sequence_duration (float, optional): Duration (s) of the audio files. If else, padding or cropping performed. Defaults to 30.
+            chunk_length (float, optional): Duration (s) of the non-overlapping "chunks". Defaults to 2.
+            frame_length (float, optional): Length (s) of the analysis window (Default to hann) used for FFT computation. Defaults to 0.04.
+            num_fft_bins (int, optional):  Number of frequencies calculated at each FFT computation. Defaults to 2048.
+            max_num_sources (int, optional): Maximum number of sources in the model output. The data will be formatted according to this value. Defaults to 5.
+            num_overlapping_sources (int, optional): Refers to the choice of the dataset according to the maximum number of overlapping sources (1,2 or 3). Defaults to None.
+            batch_size (int, optional): Number of samples to load in each batch. Defaults to 32.
+            num_workers (int, optional): Number of worker threads for multi-process data loading. Defaults to 16.
+        """
+
         super().__init__()
         self.root = root
         self.tmp_dir = tmp_dir

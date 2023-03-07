@@ -1,7 +1,7 @@
 _target_: src.models.pilot.PILOT
 
 dataset_path : /root/workspace/lightning-hydra-template/data/ansim
-cv_fold_idx: 2
+cv_fold_idx: 1
 
 hparams : 
   name: 'PILOT'
@@ -17,9 +17,9 @@ hparams :
   learning_rate: 0.05
   num_epochs_warmup: 5
   #Added
-  max_num_sources: 1
+  max_num_sources: 3
   sequence_duration: 30
-  gradient_clip_val: 1.0
+  # gradient_clip_val: 1.0
   alpha: 1
   results_dir: /root/workspace/lightning-hydra-template/results
 

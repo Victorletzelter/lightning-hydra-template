@@ -11,6 +11,25 @@ class CNN(AbstractLocalizationModule):
                  dataset_path: str,
                  cv_fold_idx: int,
                  hparams: dict) -> None:
+        """CNN Model for processing audio data. 
+
+        Args:
+            dataset_path (str): Path to the dataset folder.
+            cv_fold_idx (int): Index associated with the cross-validation fold (1,2 or 3).
+            hparams (dict): Dictionnary of hyperparameters with keys:
+              name (str): Name of the model
+              max_num_sources (int): Maximum number of sources (related the output shape).
+              sequence_duration (int): Duration (s) of the audio samples.
+              num_fft_bins (int): Number of frequencies in STFT computation.
+              frame_length (int): Length (s) of the analysis window (Default to hann) used for FFT computation. 
+              chunk_length (int): Duration (s) of the non-overlapping "chunks".
+              dropout_rate (float): Dropout rate. 
+              learning_rate (float): Initial learning rate to use in the optimization process. 
+              num_epochs_warmup (int): Number of epochs from which the learning rate decay is enabled (see configure_optimizers in the AbstractLocalizationModule).
+              alpha (float): Load of the direction_of_arrival_loss along with the source_activity_loss in the SEL (Sound Event Localization) Loss. 
+              gradient_clip_val (float): 1.0.
+              results_dir: /root/workspace/lightning-hydra-template/results.
+        """
         super(CNN, self).__init__(dataset_path, cv_fold_idx, hparams)
 
         num_steps_per_chunk = int(2 * hparams['chunk_length'] / hparams['frame_length'])

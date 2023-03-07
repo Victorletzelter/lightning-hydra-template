@@ -1,6 +1,6 @@
 _target_: src.data.TUTSoundEventsDataModule.TUTSoundEventsDataModule
 root: /root/workspace/lightning-hydra-template/data/real
-batch_size: 16
+batch_size: 32
 test_fold_idx: 1
 sequence_duration: 30
 chunk_length: 0.5

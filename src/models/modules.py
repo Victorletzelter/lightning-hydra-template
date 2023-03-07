@@ -136,7 +136,7 @@ class AbstractLocalizationModule(ptl.LightningModule, abc.ABC):
             
             results_file = os.path.join(self.hparams['results_dir'],
                                         'max_sources'+ str(self.max_num_sources) +  '_' +
-                                        'num_test_samples'+ str(len(data_frame['frame_recall'])) + '_'
+                                        'num_test_samples'+ str(len(data_frame['frame_recall']))
                                         + '.json')
 
             if not os.path.isfile(results_file):
@@ -255,8 +255,15 @@ class FeatureExtraction(nn.Module):
                  num_steps_per_chunk: int,
                  num_fft_bins: int,
                  dropout_rate: float = 0.0) -> None:
-        super(FeatureExtraction, self).__init__()
+        """Initialization of CNNs-based layers for features extraction. 
 
+        Args:
+            num_steps_per_chunk (int): Number of steps in each chunk.  
+            num_fft_bins (int): Number of frequencies calculated at each FFT computation.
+            dropout_rate (float, optional): Dropout rate. Defaults to 0.0.
+        """
+        super(FeatureExtraction, self).__init__()
+        # As the number of audio channels in the raw data is four, this number doubles after frequency features extraction (amplitude and phase). 
         self.conv_layer1 = nn.Sequential(
             nn.Conv2d(8, 64, kernel_size=(3, 3), padding=(1, 1), padding_mode='replicate'),
             nn.BatchNorm2d(64),
@@ -279,22 +286,26 @@ class FeatureExtraction(nn.Module):
             nn.Dropout(p=dropout_rate)
         )
 
-        self.layer_norm = nn.LayerNorm([num_steps_per_chunk, int(num_fft_bins / 4)])
+        self.layer_norm = nn.LayerNorm([num_steps_per_chunk, int(num_fft_bins / 4)]) # Layer normalization used 
+        # Statistics are calculated over the last two dimensions of the input.s
 
     def forward(self,
                 audio_features: torch.Tensor) -> torch.Tensor:
         """Feature extraction forward pass.
 
-        :param audio_features: Input tensor with dimensions [NxTxBx2*C], where N is the batch size, T is the number of
-                               time steps per chunk, B is the number of FFT bins and C is the number of audio channels.
-        :return: Extracted features with dimension [NxTxB/4].
+        Args:
+            audio_features (torch.Tensor): Input tensor with dimensions [batchx2*CxTxB], where batch is the batch size, T is the number of
+        time steps per chunk, B is the number of FFT bins and C is the number of audio channels.
+
+        Returns:
+            torch.Tensor: Extracted features with dimension [batchxTxB/4].
         """
-        output = self.conv_layer1(audio_features)     
-        output = self.conv_layer2(output)    
-        output = self.conv_layer3(output)
-        output = output.permute(0, 2, 1, 3)
+        output = self.conv_layer1(audio_features) # Output shape [batchx64xTxB/8]
+        output = self.conv_layer2(output) # Output shape [batchx64xTxB/64]    
+        output = self.conv_layer3(output) # Output shape [batchx64xTxB/256]   
+        output = output.permute(0, 2, 1, 3)   # Output shape [batchxTx64xB/256]  
         batch_size, num_frames, _, _ = output.shape
-        output = output.contiguous().view(batch_size, num_frames, -1)
+        output = output.contiguous().view(batch_size, num_frames, -1) # Output shape [batchxTxB/4]
 
         return self.layer_norm(output)
 
@@ -321,10 +332,10 @@ class LocalizationOutput(nn.Module):
                 input: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """Model forward pass.
 
-        :param input: Input tensor with dimensions [NxTxD], where N is the batch size, T is the number of time steps per
+        :param input: Input tensor with dimensions [batchxTxD], where batch is the batch size, T is the number of time steps per
                       chunk and D is the input dimension.
-        :return: Tuple containing the source activity tensor of size [NxTxS] and the direction-of-arrival tensor with
-                 dimensions [NxTxSx2], where S is the maximum number of sources.
+        :return: Tuple containing the source activity tensor of size [batchxTxS] and the direction-of-arrival tensor with
+                 dimensions [batchxTxSx2], where S is the maximum number of sources.
         """
         source_activity = self.source_activity_output(input)
 
