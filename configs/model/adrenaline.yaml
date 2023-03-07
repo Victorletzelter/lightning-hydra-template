@@ -1,7 +1,7 @@
 _target_: src.models.adrenaline.ADRENALINE
 
 dataset_path : /root/workspace/lightning-hydra-template/data/ansim
-cv_fold_idx: 1
+cv_fold_idx: 2
 
 hparams : 
   name: 'ADRENALINE'
