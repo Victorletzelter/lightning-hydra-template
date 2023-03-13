@@ -1,6 +1,7 @@
 _target_: src.data.TUTSoundEventsDataModule.TUTSoundEventsDataModule
 root: /root/workspace/lightning-hydra-template/data/ansim
-tmp_dir: ${paths.output_dir}/tmp
+# tmp_dir: ${paths.output_dir}/tmp
+tmp_dir: /root/workspace/lightning-hydra-template/tmp/ansim/default-train-max-3-cvtest-1/ansim
 batch_size: 16
 test_fold_idx: 1 # Choice of the cross-validation folder, i.e., the index of the folder (1,2 or 3) on which the testing will be performed.
 sequence_duration: 30 # Duration (s) of the audio files. If else, padding or cropping performed (_get_audio_features in tut_sound_events.py)

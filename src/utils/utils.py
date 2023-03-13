@@ -429,70 +429,185 @@ class MHSELLoss(_Loss):
         
     #     return loss 
     
-    def draft_make_sampling_loss_ambiguous_gts(self, hyps_stacked_t, source_activity_target_t, direction_of_arrival_target_t, mode='epe', top_n=1):
-        # hyps_stacked_t of shape [batchxself.num_hypothesisx2]
+    def OK_draft_make_sampling_loss_ambiguous_gts(hyps_stacked_t, source_activity_target_t, direction_of_arrival_target_t, mode='epe'):
+        # hyps_stacked_t of shape [batch,self.num_hypothesis,2]
         # source_activity_target_t of shape [batch,Max_sources]
         # direction_of_arrival_target_t of shape [batch,Max_sources,2]
-        # TODOO: mode 
-        # TODOO top_n
         
-        filling_value = torch.tensor([1000,1000]) #Tensors of large number (on purpose) ; computational trick to not considers the errors values
-        # whenever the sources are not active.
+        filling_value = 10000 #Large number (on purpose) ; computational trick to not considers the "fake" ground truths.
+        # whenever the sources are not active, as the source_activity is not to be deduced by the model is these settings. 
         num_hyps = hyps_stacked_t.shape[1]
         batch = source_activity_target_t.shape[0]
         Max_sources = source_activity_target_t.shape[1]
         
         #1st padding related to the inactive sources, not considered in the error calculation (with high error values)
-        direction_of_arrival_target_t[source_activity_target_t == 0, :, :] = filling_value #Shape [batch,Max_sources,2]
+        mask_active_sources = source_activity_target_t == 0
+        mask_active_sources = mask_active_sources.unsqueeze(-1).expand_as(direction_of_arrival_target_t)
+        direction_of_arrival_target_t[mask_active_sources] = filling_value #Shape [batch,Max_sources,2]
         
-        #2nd padding related for the Max_sources dimension set to the number of hypothesis
-        gts = torch.nn.functional.pad(input = direction_of_arrival_target_t, pad = (0,0,0,num_hyps-Max_sources),value=filling_value)
-        #Shape [batch,num_hyps,2]
+        #The ground truth tensor created is of shape [batch,Max_sources,num_hypothesis,2], such that each of the 
+        # tensors gts[batch,i,num_hypothesis,2] contains duplicates of direction_of_arrival_target_t along the num_hypothesis
+        # dimension. Note that for some values of i, gts[batch,i,num_hypothesis,2] may contain inactive sources, and therefore 
+        # gts[batch,i,j,2] will be filled with filling_value (defined above) for each j in the hypothesis dimension.
+        gts =  direction_of_arrival_target_t.unsqueeze(2).repeat(1,1,num_hyps,1) #Shape [batch,Max_sources,num_hypothesis,2]
+        
+        #We duplicate the hyps_stacked with a new dimension of shape Max_sources
+        hyps_stacked_t_duplicated = hyps_stacked_t.unsqueeze(1).repeat(1,Max_sources,1,1) #Shape [batch,Max_sources,num_hypothesis,2]
 
-        epsillon = 0.05
+        epsilon = 0.05
         eps = 0.001
         
         #### With euclidean distance
-        diff = torch.square(hyps_stacked_t - gts).unsqueeze(-1).unsqueeze(-1) # (batch, num_hyps, 2, 1, 1)
-        channels_sum = torch.sum(diff, dim=2) # (batch, num_hyps, 1, 1)
-        spatial_epes = torch.sqrt(channels_sum + eps)  # (batch, num_hyps , 1, 1)
+        diff = torch.square(hyps_stacked_t_duplicated-gts) #Shape [batch,Max_sources,num_hypothesis,2]
+        channels_sum = torch.sum(diff, dim=2) #Sum over the two dimensions (azimuth and elevation here). Shape [batch,Max_sources,num_hypothesis]
+        spatial_epes = torch.sqrt(channels_sum + eps)  #Distance matrix [batch,Max_sources,num_hypothesis]
+        
+        sum_losses = torch.tensor(0.0)
 
-        ### With spherical distance
-        hyps_stacked_t = hyps_stacked_t.view(-1,2) #Shape (batch*num_hyps,2)
-        gts = gts.view(-1,2) #Shape (batch*num_hyps,2)
-        diff = compute_spherical_distance(hyps_stacked_t,gts)
-        diff = diff.view(batch,num_hyps) # Shape (batch,num_hyps)
-        spatial_epes = diff.unsqueeze(2).unsqueeze(3).unsqueeze(4) # Shape (batch,num_hyps,1,1,1)
+        if mode == 'epe': 
+            
+            spatial_epe, idx_selected = torch.min(spatial_epes, dim=2) #spatial_epe of shape [batch,Max_sources]
+            mask = spatial_epe >= filling_value/2 #We create a mask for only selecting the actives sources, i.e. those which were not filled with
+            # direction_of_arrival_target_t[:, source_activity_target_t == 0, :] = filling_value above. 
+            spatial_epe = spatial_epe*mask #[batch,Max_sources], we select only the active sources. 
+            count_non_zero = torch.sum(mask!=0) #We count the number of actives sources for the computation of the mean (below). 
+            loss = torch.sum(spatial_epe)/count_non_zero #We compute the mean of the diff. 
+            sum_losses = torch.add(loss, sum_losses)  
+            
+        elif mode == 'epe-relaxed':
+        
+            #We compute the loss for the "best" hypothesis. 
+            
+            spatial_epe, idx_selected = torch.min(spatial_epes, dim=2) #spatial_epe of shape [batch,Max_sources], idx_selected of shape [batch].
+            mask = spatial_epe >= filling_value/2 #We create a mask for only selecting the actives sources, i.e. those which were not filled with
+            # direction_of_arrival_target_t[:, source_activity_target_t == 0, :] = filling_value above. 
+            spatial_epe = spatial_epe*mask #Shape [batch,Max_sources] ; we select only the active sources. 
+            count_non_zero = torch.sum(mask!=0) #We count the number of actives sources as a sum over the batch for the computation of the mean (below).
+            loss0 = torch.multiply(torch.sum(spatial_epe)/count_non_zero, 1 - epsilon) #Scalar (average with coefficient)
+
+            #We then the find the other hypothesis, and compute the epsilon weighted loss for them
+            
+            # At first, we remove hypothesis corresponding to "fake" ground-truth.         
+            large_mask = spatial_epes >= filling_value/2 # We remove entries corresponding to "fake"/filled ground truth in the tensor spatial_epes on
+            # which the min operator was not already applied. Shape [batch,Max_sources,num_hypothesis]
+            spatial_epes = spatial_epes*large_mask # Shape [batch,Max_sources,num_hypothesis].
+            
+            # We then remove the hypothesis selected above (with minimum dist)
+            mask_selected = torch.zeros_like(spatial_epes,dtype=bool) #Shape [batch,Max_sources,num_hypothesis]
+            mask_selected.scatter_(2, idx_selected.unsqueeze(-1), 1) #Shape [batch,Max_sources,num_hypothesis]
+            mask_selected = ~mask_selected #Shape [batch,Max_sources,num_hypothesis], we keep only the hypothesis which are not the minimum.
+            spatial_epes = spatial_epes * mask_selected #Shape [batch,Max_sources,num_hypothesis]
+            
+            # mask_active_sources = mask_active_sources.unsqueeze(-1).expand_as(direction_of_arrival_target_t)
+            # direction_of_arrival_target_t[mask_active_sources] = filling_value #Shape [batch,Max_sources,2]
+            
+            # Finally, we compute the loss
+            count_non_zeros = torch.sum(spatial_epes!=0)
+            if count_non_zeros > 0 :
+                loss = torch.multiply(torch.sum(spatial_epes)/count_non_zero, epsilon) #Scalar for each hyp
+            
+            sum_losses = torch.add(loss, sum_losses)
+            sum_losses = torch.add(loss0, sum_losses)
+            
+        return sum_losses
+    
+    def draft_make_sampling_loss_ambiguous_gts(self, hyps_stacked_t, source_activity_target_t, direction_of_arrival_target_t, mode='epe', top_n=1):
+        # hyps_stacked_t of shape [batch,self.num_hypothesis,2]
+        # source_activity_target_t of shape [batch,Max_sources]
+        # direction_of_arrival_target_t of shape [batch,Max_sources,2]
+        # TODOO: mode 
+        # TODOO top_n
+        
+        filling_value = torch.tensor([10000,10000]) #Tensors of large number (on purpose) ; computational trick to not considers the errors values
+        # whenever the sources are not active, as the source_activity is not to be deduced by the model is these settings. 
+        num_hyps = hyps_stacked_t.shape[1]
+        batch = source_activity_target_t.shape[0]
+        Max_sources = source_activity_target_t.shape[1]
+        
+        #1st padding related to the inactive sources, not considered in the error calculation (with high error values)
+        direction_of_arrival_target_t[:, source_activity_target_t == 0, :] = filling_value #Shape [batch,Max_sources,2]
+        
+        #The ground truth tensor created is of shape [batch,Max_sources,num_hypothesis,2], such that each of the 
+        # tensors gts[batch,i,num_hypothesis,2] contains duplicates of direction_of_arrival_target_t along the num_hypothesis
+        # dimension. Note that for some values of i, gts[batch,i,num_hypothesis,2] may contain inactive sources, and therefore 
+        # gts[batch,i,j,2] will be filled with filling_value (defined above) for each j in the hypothesis dimension.
+        gts =  direction_of_arrival_target_t.unsqueeze(2).repeat(1,1,num_hyps,1) #Shape [batch,Max_sources,num_hypothesis,2]
+        
+        #We duplicate the hyps_stacked with a new dimension of shape Max_sources
+        hyps_stacked_t_duplicated = hyps_stacked_t.unsqueeze(1).repeat(1,Max_sources,1,1) #Shape [batch,Max_sources,num_hypothesis,2]
+
+        epsilon = 0.05
+        eps = 0.001
+        
+        #### With euclidean distance
+        diff = torch.square(hyps_stacked_t_duplicated-gts) #Shape [batch,Max_sources,num_hypothesis,2]
+        channels_sum = torch.sum(diff, dim=2) #Sum over the two dimensions (azimuth and elevation here). Shape [batch,Max_sources,num_hypothesis]
+        spatial_epes = torch.sqrt(channels_sum + eps)  #Distance matrix [batch,Max_sources,num_hypothesis]
+
+        # ### With spherical distance
+        # hyps_stacked_t = hyps_stacked_t.view(-1,2) #Shape (batch*num_hyps,2)
+        # gts = gts.view(-1,2) #Shape (batch*num_hyps,2)
+        # diff = compute_spherical_distance(hyps_stacked_t,gts)
+        # diff = diff.view(batch,num_hyps) # Shape (batch,num_hyps)
+        # spatial_epes = diff.unsqueeze(2).unsqueeze(3).unsqueeze(4) # Shape (batch,num_hyps,1,1,1)
         
         sum_losses = torch.constant(0.0)
 
-        if mode == 'epe':
-            spatial_epe = torch.min(spatial_epes, dim=1) #(batch, 1, 1)
-            loss = torch.multiply(torch.mean(spatial_epe), 1.0) # Scalar (average of the losses)
-            sum_losses = torch.add(loss, sum_losses) 
-
+        if mode == 'epe': 
+            
+            spatial_epe = torch.min(spatial_epes, dim=2) #[batch,Max_sources]
+            mask = spatial_epe >= filling_value[0]/2 #We create a mask for only selecting the actives sources, i.e. those which were not filled with
+            # direction_of_arrival_target_t[:, source_activity_target_t == 0, :] = filling_value above. 
+            spatial_epe = spatial_epe*mask #[batch,Max_sources], we select only the active sources. 
+            count_non_zero = torch.sum(mask!=0) #We count the number of actives sources for the computation of the mean (below). 
+            loss = torch.sum(spatial_epe)/count_non_zero #We compute the mean of the diff. 
+            sum_losses = torch.add(loss, sum_losses)  
+            
         elif mode == 'epe-relaxed':
-            spatial_epe = torch.min(spatial_epes, dim=1) #(batch, 1, 1)
-            loss0 = torch.multiply(torch.mean(spatial_epe), 1 - 2 * epsillon) #Scalar (average with coefficient)
+            
+            #We compute the loss for the "best" hypothesis. 
+            
+            spatial_epe = torch.min(spatial_epes, dim=2) #[batch,Max_sources]  
+            idx_selected =  torch.argmin(spatial_epes, dim=1) #[batch]
+            mask = spatial_epe >= filling_value[0]/2 #We create a mask for only selecting the actives sources, i.e. those which were not filled with
+            # direction_of_arrival_target_t[:, source_activity_target_t == 0, :] = filling_value above. 
+            spatial_epe = spatial_epe*mask #Shape [batch,Max_sources] ; we select only the active sources. 
+            count_non_zero = torch.sum(mask!=0) #We count the number of actives sources as a sum over the batch for the computation of the mean (below).
+            loss0 = torch.multiply(torch.sum(spatial_epe)/count_non_zero, 1 - epsilon) #Scalar (average with coefficient)
 
-            for i in range(num_hyps):
-                loss = torch.multiply(torch.mean(spatial_epes[:, i, :, :]), epsillon / (num_hyps-1)) #Scalar for each hyp
-                sum_losses = torch.add(loss, sum_losses)
-                
+            #We then the find the other hypothesis, and compute the epsilon weighted loss for them
+            
+            # At first, we remove hypothesis corresponding to "fake" ground-truth.         
+            large_mask = spatial_epes >= filling_value[0]/2 # We remove entries corresponding to "fake"/filled ground truth in the tensor spatial_epes on
+            # which the min operator was not already applied. Shape [batch,Max_sources,num_hypothesis]
+            spatial_epes = spatial_epes*large_mask # Shape [batch,Max_sources,num_hypothesis].
+            
+            # We then remove the hypothesis selected above (with minimum dist)
+            mask_selected = torch.ones_like(spatial_epes) # Shape [batch,Max_sources,num_hypothesis].
+            mask_selected.scatter_(1, idx_selected.unsqueeze(1), 0) #We put 0 on the selected hypothesis and 1 elsewhere
+            spatial_epes = spatial_epes * mask_selected
+            
+            # Finally, we compute the loss
+            count_non_zeros = torch.sum(mask_selected!=0)
+            if count_non_zeros > 0 :
+                loss = torch.multiply(torch.sum(spatial_epes)/count_non_zero, epsilon) #Scalar for each hyp
+            
+            sum_losses = torch.add(loss, sum_losses)
             sum_losses = torch.add(loss0, sum_losses)
 
-        elif mode == 'epe-top-n' and top_n > 1:
-            spatial_epes_transposed = torch.multiply(torch.transpose(spatial_epes, perm=[0, 2, 3, 1]), -1) #(batch, 1 ,1, num_hyps)
-            top_k, indices = torch.topk(input=spatial_epes_transposed, k=top_n, dim=-1) #(batch, 1 ,1, num_hyps) ranked
-            spatial_epes_min = torch.multiply(torch.transpose(top_k, perm=[0, 3, 1, 2]), -1) #(batch, num_hyps, 1, 1)
-            for i in range(top_n):
-                loss = torch.multiply(torch.mean(spatial_epes_min[:, i, :, :]), 1.0) #Scalar for each hyp
-                sum_losses = torch.add(loss, sum_losses)
+        # TODOO the other modes
+        # elif mode == 'epe-top-n' and top_n > 1:
+        #     spatial_epes_transposed = torch.multiply(torch.transpose(spatial_epes, perm=[0, 2, 3, 1]), -1) #(batch, 1 ,1, num_hyps)
+        #     top_k, indices = torch.topk(input=spatial_epes_transposed, k=top_n, dim=-1) #(batch, 1 ,1, num_hyps) ranked
+        #     spatial_epes_min = torch.multiply(torch.transpose(top_k, perm=[0, 3, 1, 2]), -1) #(batch, num_hyps, 1, 1)
+        #     for i in range(top_n):
+        #         loss = torch.multiply(torch.mean(spatial_epes_min[:, i, :, :]), 1.0) #Scalar for each hyp
+        #         sum_losses = torch.add(loss, sum_losses)
 
-        elif mode == 'epe-all':
-            for i in range(num_hyps):
-                loss = torch.multiply(torch.mean(spatial_epes[:, i, :, :]), 1.0)
-                sum_losses = torch.add(loss, sum_losses)
+        # elif mode == 'epe-all':
+        #     for i in range(num_hyps):
+        #         loss = torch.multiply(torch.mean(spatial_epes[:, i, :, :]), 1.0)
+        #         sum_losses = torch.add(loss, sum_losses)
 
         return sum_losses
     
@@ -516,7 +631,7 @@ class MHSELLoss(_Loss):
         gts = torch.nn.functional.pad(input = direction_of_arrival_target_t, pad = (0,0,0,num_hyps-Max_sources),value=filling_value)
         #Shape [batch,num_hyps,2]
 
-        epsillon = 0.05
+        epsilon = 0.05
         eps = 0.001
         
         #### With euclidean distance
@@ -540,10 +655,10 @@ class MHSELLoss(_Loss):
 
         elif mode == 'epe-relaxed':
             spatial_epe = torch.min(spatial_epes, dim=1) #(batch, 1, 1)
-            loss0 = torch.multiply(torch.mean(spatial_epe), 1 - 2 * epsillon) #Scalar (average with coefficient)
+            loss0 = torch.multiply(torch.mean(spatial_epe), 1 - 2 * epsilon) #Scalar (average with coefficient)
 
             for i in range(num_hyps):
-                loss = torch.multiply(torch.mean(spatial_epes[:, i, :, :]), epsillon / (num_hyps-1)) #Scalar for each hyp
+                loss = torch.multiply(torch.mean(spatial_epes[:, i, :, :]), epsilon / (num_hyps-1)) #Scalar for each hyp
                 sum_losses = torch.add(loss, sum_losses)
                 
             sum_losses = torch.add(loss0, sum_losses)
@@ -573,7 +688,7 @@ class MHSELLoss(_Loss):
         num_hyps = hyps_stacked.shape[-2]
         
         gts = torch.stack([gt for i in range(0, num_hyps)],axis = 1) # (batch, num_hyps, 2, 1, 1)
-        epsillon = 0.05
+        epsilon = 0.05
         eps = 0.001
         diff = torch.square(hyps_stacked - gts) # (batch, num_hyps, 2, 1, 1)
         channels_sum = torch.sum(diff, dim=2) # (batch, num_hyps, 1, 1)
@@ -587,10 +702,10 @@ class MHSELLoss(_Loss):
 
         elif mode == 'epe-relaxed':
             spatial_epe = torch.min(spatial_epes, dim=1) #(batch, 1, 1)
-            loss0 = torch.multiply(torch.mean(spatial_epe), 1 - 2 * epsillon) #Scalar
+            loss0 = torch.multiply(torch.mean(spatial_epe), 1 - 2 * epsilon) #Scalar
 
             for i in range(num_hyps):
-                loss = torch.multiply(torch.mean(spatial_epes[:, i, :, :]), epsillon / (num_hyps)) #Scalar for each hyp
+                loss = torch.multiply(torch.mean(spatial_epes[:, i, :, :]), epsilon / (num_hyps)) #Scalar for each hyp
                 sum_losses = torch.add(loss, sum_losses)
                 
             sum_losses = torch.add(loss0, sum_losses)

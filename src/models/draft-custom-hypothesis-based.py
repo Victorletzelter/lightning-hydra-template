@@ -33,9 +33,9 @@ class MHSELDNet(AbstractLocalizationModule):
     def forward(self,
                 audio_features: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, dict]:
         extracted_features = self.feature_extraction(audio_features) # extracted_features of shape
-        #[batchxTxB/4] where batch is the batch size, T is the number of time steps per chunk, and B is the number of FFT bins.
+        #[batch,T,B/4] where batch is the batch size, T is the number of time steps per chunk, and B is the number of FFT bins.
 
-        output, _ = self.gru(extracted_features) # output of shape [batchxTxhparams['hidden_dim']]
+        output, _ = self.gru(extracted_features) # output of shape [batch,T,hparams['hidden_dim']]
 
         MHdirection_of_arrival_output = self.localization_output(output) # output of shape [batch,T,num_hypothesis,2]
         meta_data = {}
