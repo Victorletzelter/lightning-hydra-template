@@ -6,12 +6,12 @@ from typing import Tuple
 from src.utils import utils
 from src.utils.utils import SELLoss
 
-class SELDNet(AbstractLocalizationModule):
+class ACCDOA(AbstractLocalizationModule):
     def __init__(self,
                  dataset_path: str,
                  cv_fold_idx: int,
                  hparams: Namespace) -> None:
-        super(SELDNet, self).__init__(dataset_path, cv_fold_idx, hparams)
+        super(ACCDOA, self).__init__(dataset_path, cv_fold_idx, hparams)
 
         num_steps_per_chunk = int(2 * hparams.chunk_length / hparams.frame_length)
         self.feature_extraction = FeatureExtraction(num_steps_per_chunk,

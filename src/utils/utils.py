@@ -429,15 +429,13 @@ class MHSELLoss(_Loss):
         
     #     return loss 
     
-    def make_sampling_loss_ambiguous_gts(self, hyps_stacked_t, source_activity_target_t, direction_of_arrival_target_t, mode='epe', top_n=1):
+    def draft_make_sampling_loss_ambiguous_gts(self, hyps_stacked_t, source_activity_target_t, direction_of_arrival_target_t, mode='epe', top_n=1):
         # hyps_stacked_t of shape [batchxself.num_hypothesisx2]
         # source_activity_target_t of shape [batch,Max_sources]
-        # direction_of_arrival_target_t of shape [N,Max_sources,2]
+        # direction_of_arrival_target_t of shape [batch,Max_sources,2]
         # TODOO: mode 
         # TODOO top_n
         
-        source_activity_target_t #Shape [batch,Max_sources]
-        direction_of_arrival_target_t #Shape [batch,Max_sources,2]
         filling_value = torch.tensor([1000,1000]) #Tensors of large number (on purpose) ; computational trick to not considers the errors values
         # whenever the sources are not active.
         num_hyps = hyps_stacked_t.shape[1]
@@ -498,6 +496,72 @@ class MHSELLoss(_Loss):
 
         return sum_losses
     
+    def make_sampling_loss_to_correct(self, hyps_stacked_t, source_activity_target_t, direction_of_arrival_target_t, mode='epe', top_n=1):
+        # hyps_stacked_t of shape [batchxself.num_hypothesisx2]
+        # source_activity_target_t of shape [batch,Max_sources]
+        # direction_of_arrival_target_t of shape [batch,Max_sources,2]
+        # TODOO: mode 
+        # TODOO top_n
+        
+        filling_value = torch.tensor([1000,1000]) #Tensors of large number (on purpose) ; computational trick to not considers the errors values
+        # whenever the sources are not active.
+        num_hyps = hyps_stacked_t.shape[1]
+        batch = source_activity_target_t.shape[0]
+        Max_sources = source_activity_target_t.shape[1]
+        
+        #1st padding related to the inactive sources, not considered in the error calculation (with high error values)
+        direction_of_arrival_target_t[source_activity_target_t == 0, :, :] = filling_value #Shape [batch,Max_sources,2]
+        
+        #2nd padding related for the Max_sources dimension set to the number of hypothesis
+        gts = torch.nn.functional.pad(input = direction_of_arrival_target_t, pad = (0,0,0,num_hyps-Max_sources),value=filling_value)
+        #Shape [batch,num_hyps,2]
+
+        epsillon = 0.05
+        eps = 0.001
+        
+        #### With euclidean distance
+        diff = torch.square(hyps_stacked_t - gts).unsqueeze(-1).unsqueeze(-1) # (batch, num_hyps, 2, 1, 1)
+        channels_sum = torch.sum(diff, dim=2) # (batch, num_hyps, 1, 1)
+        spatial_epes = torch.sqrt(channels_sum + eps)  # (batch, num_hyps , 1, 1)
+
+        ### With spherical distance
+        hyps_stacked_t = hyps_stacked_t.view(-1,2) #Shape (batch*num_hyps,2)
+        gts = gts.view(-1,2) #Shape (batch*num_hyps,2)
+        diff = compute_spherical_distance(hyps_stacked_t,gts)
+        diff = diff.view(batch,num_hyps) # Shape (batch,num_hyps)
+        spatial_epes = diff.unsqueeze(2).unsqueeze(3).unsqueeze(4) # Shape (batch,num_hyps,1,1,1)
+        
+        sum_losses = torch.constant(0.0)
+
+        if mode == 'epe':
+            spatial_epe = torch.min(spatial_epes, dim=1) #(batch, 1, 1)
+            loss = torch.multiply(torch.mean(spatial_epe), 1.0) # Scalar (average of the losses)
+            sum_losses = torch.add(loss, sum_losses) 
+
+        elif mode == 'epe-relaxed':
+            spatial_epe = torch.min(spatial_epes, dim=1) #(batch, 1, 1)
+            loss0 = torch.multiply(torch.mean(spatial_epe), 1 - 2 * epsillon) #Scalar (average with coefficient)
+
+            for i in range(num_hyps):
+                loss = torch.multiply(torch.mean(spatial_epes[:, i, :, :]), epsillon / (num_hyps-1)) #Scalar for each hyp
+                sum_losses = torch.add(loss, sum_losses)
+                
+            sum_losses = torch.add(loss0, sum_losses)
+
+        elif mode == 'epe-top-n' and top_n > 1:
+            spatial_epes_transposed = torch.multiply(torch.transpose(spatial_epes, perm=[0, 2, 3, 1]), -1) #(batch, 1 ,1, num_hyps)
+            top_k, indices = torch.topk(input=spatial_epes_transposed, k=top_n, dim=-1) #(batch, 1 ,1, num_hyps) ranked
+            spatial_epes_min = torch.multiply(torch.transpose(top_k, perm=[0, 3, 1, 2]), -1) #(batch, num_hyps, 1, 1)
+            for i in range(top_n):
+                loss = torch.multiply(torch.mean(spatial_epes_min[:, i, :, :]), 1.0) #Scalar for each hyp
+                sum_losses = torch.add(loss, sum_losses)
+
+        elif mode == 'epe-all':
+            for i in range(num_hyps):
+                loss = torch.multiply(torch.mean(spatial_epes[:, i, :, :]), 1.0)
+                sum_losses = torch.add(loss, sum_losses)
+
+        return sum_losses
 
     def make_sampling_loss(self, hyps_stacked, gt, mode='epe', top_n=1):
         # gt has the shape (batch,2,1,1) which corresponds to the ground-truth future location (x,y)

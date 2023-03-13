@@ -16,12 +16,16 @@ class SELDNet(AbstractLocalizationModule):
         num_steps_per_chunk = int(2 * hparams.chunk_length / hparams.frame_length)
         self.feature_extraction = FeatureExtraction(num_steps_per_chunk,
                                                     hparams.num_fft_bins,
-                                                    dropout_rate=hparams.dropout_rate)
+                                                    dropout_rate=hparams.dropout_rate) # The FeatureExtraction module
+        # consists of stacked convolutionnal layers with batch normalization, ReLU, MaxPool and Dropout. 
 
-        feature_dim = int(hparams.num_fft_bins / 4)
+        feature_dim = int(hparams.num_fft_bins / 4) # See the FeatureExtraction module for the justification of this 
+        # value for the feature_dim. 
+        
         self.gru = nn.GRU(feature_dim, hparams.hidden_dim, num_layers=4, batch_first=True, bidirectional=True)
 
-        self.localization_output = LocalizationOutput(2 * hparams.hidden_dim, hparams.max_num_sources)
+        self.localization_output = LocalizationOutput(input_dim = 2 * hparams.hidden_dim, max_num_sources = hparams.max_num_sources)
+        # In the localization module, the input_dim is to 2 * hparams.hidden_dim if bidirectional=True in the GRU.
 
     def get_loss_function(self) -> nn.Module:
         return SELLoss(self.hparams.max_num_sources, alpha=self.hparams.alpha)

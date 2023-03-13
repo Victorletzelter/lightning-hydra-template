@@ -5,7 +5,7 @@ default_root_dir: ${paths.output_dir}
 min_epochs: 1 # prevents early stopping
 max_epochs: 1
 
-accelerator: cpu
+accelerator: gpu
 devices: 1
 
 # mixed precision for extra speed-up
@@ -19,10 +19,10 @@ devices: 1
 deterministic: False
 
 #Additional arguments for setup_purposes
-# limit_train_batches: 51
-# limit_val_batches: 10
-# limit_test_batches: 10
-# max_steps: 6
-# val_check_interval: 50
+limit_train_batches: 2
+limit_val_batches: 1
+limit_test_batches: 4
+max_steps: 2
+val_check_interval: 1
 
 

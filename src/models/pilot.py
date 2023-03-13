@@ -125,7 +125,7 @@ class PILOT(AbstractLocalizationModule):
         
         posterior_mean = torch.cat(posterior_mean, dim=-1).permute(0, 1, 3, 2)
         posterior_covariance = torch.cat(posterior_covariance, dim=-1).permute(0, 1, 4, 2, 3)
-        # source_activity = source_activity.permute(0, 2, 1)
+        source_activity = source_activity.permute(0, 2, 1)
 
         return source_activity, posterior_mean, posterior_covariance
     

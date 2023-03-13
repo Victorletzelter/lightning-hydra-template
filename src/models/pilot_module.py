@@ -116,6 +116,10 @@ class AbstractLocalizationModule(ptl.LightningModule, abc.ABC):
         }
         
         #We check whether outputs if a list of List[Dict] (case with several subsets) or if it is a list of dicts (case of one subset)  
+            
+        print("test ici")
+        print(len(outputs))
+        print(outputs[0])    
                
         if len(outputs)>0 and isinstance(outputs[0],list) : 
             
@@ -140,10 +144,11 @@ class AbstractLocalizationModule(ptl.LightningModule, abc.ABC):
             average_frame_recall = torch.tensor(data_frame['frame_recall'].mean(), dtype=torch.float32)
             average_doa_error = torch.tensor(data_frame['doa_error'].mean(), dtype=torch.float32)
             
-            results_file = os.path.join(self.hparams['results_dir'],
-                                        'max_sources'+ str(self.max_num_sources) +  '_' +
-                                        'num_test_samples'+ str(len(data_frame['frame_recall'])) + '_'
-                                        + '.json')
+            results_file = os.path.join(self.hparams['results_dir'], self.hparams['name'] + '_'
+                                        + dataset_name + '_' + 'fold' + str(self.cv_fold_idx) + '_'
+                                    'max_sources'+ str(self.max_num_sources) +  '_' +
+                                    'num_dataloders'+ str(len(data_frame['frame_recall']))
+                                    + '.json')
 
             if not os.path.isfile(results_file):
                 data_frame.to_json(results_file)
@@ -175,7 +180,7 @@ class AbstractLocalizationModule(ptl.LightningModule, abc.ABC):
             results_file = os.path.join(self.hparams['results_dir'], self.hparams['name'] + '_'
                                         + dataset_name + '_' + 'fold' + str(self.cv_fold_idx) + '_'
                                     'max_sources'+ str(self.max_num_sources) +  '_' +
-                                    'num_test_samples'+ str(len(data_frame['frame_recall'])) + '_'
+                                    'num_test_samples'+ str(len(data_frame['frame_recall']))
                                     + '.json')
             
             if not os.path.isfile(results_file):

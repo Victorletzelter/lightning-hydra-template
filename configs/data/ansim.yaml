@@ -1,7 +1,7 @@
 _target_: src.data.TUTSoundEventsDataModule.TUTSoundEventsDataModule
 root: /root/workspace/lightning-hydra-template/data/ansim
 tmp_dir: ${paths.output_dir}/tmp
-batch_size: 32
+batch_size: 16
 test_fold_idx: 1 # Choice of the cross-validation folder, i.e., the index of the folder (1,2 or 3) on which the testing will be performed.
 sequence_duration: 30 # Duration (s) of the audio files. If else, padding or cropping performed (_get_audio_features in tut_sound_events.py)
 chunk_length: 0.5 # Duration (s) of the non-overlapping "chunks". 
@@ -13,4 +13,4 @@ num_fft_bins: 2048 # Number of frequencies calculated at each FFT computation. N
 max_num_sources: 3 # Maximum number of sources in the model output. The data will be formatted according to this value,
 # e.g., direction_of_arrival = np.zeros((num_frames_per_chunk, self.max_num_sources, 2), dtype=np.float32), the _get_targets fct in tut_sound_events.py.
 num_overlapping_sources: 3 # Refers to the choice of the dataset according to the maximum number of overlapping sources (1,2 or 3).
-num_workers: 64 # Number of worker threads for multi-process data loading.
+num_workers: 32 # Number of worker threads for multi-process data loading.

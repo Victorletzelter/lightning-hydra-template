@@ -1,0 +1,1 @@
+{"model":{"0":"CNN","1":"CNN","2":"CNN"},"dataset":{"0":"ansim","1":"ansim","2":"ansim"},"fold_idx":{"0":1,"1":1,"2":1},"subset_idx":{"0":0,"1":1,"2":2},"frame_recall":{"0":0.368750006,"1":0.1887499988,"2":0.09375},"doa_error":{"0":null,"1":null,"2":null}}

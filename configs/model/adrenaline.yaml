@@ -4,12 +4,12 @@ dataset_path : /root/workspace/lightning-hydra-template/data/ansim
 cv_fold_idx: 1
 
 hparams : 
-  name: 'ADRENALINE'
-  max_num_sources: 3
-  sequence_duration: 30
-  num_fft_bins: 2048
-  frame_length: 0.04
-  chunk_length: 0.5
+  name: 'ADRENALINE' # Name of the model
+  max_num_sources: 3 # Maximum number of sources (related the output shape).
+  sequence_duration: 30 # Assumed duration (s) of the audio samples (if not, cropping or padding performed).
+  num_fft_bins: 2048 # Number of frequencies in STFT computation.
+  frame_length: 0.04 # Length (s) of the analysis window (Default to hann) used for FFT computation.
+  chunk_length: 0.5 # Duration (s) of the non-overlapping "chunks".
   hidden_dim: 128
   num_layers: 2
   dropout_rate: 0

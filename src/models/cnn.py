@@ -11,7 +11,7 @@ class CNN(AbstractLocalizationModule):
                  dataset_path: str,
                  cv_fold_idx: int,
                  hparams: dict) -> None:
-        """CNN Model for processing audio data. 
+        """CNN for processing audio data. 
 
         Args:
             dataset_path (str): Path to the dataset folder.

@@ -104,43 +104,100 @@ class AbstractLocalizationModule(ptl.LightningModule, abc.ABC):
                        outputs: List) -> None:
         dataset_name = os.path.split(self.dataset_path)[-1]
         model_name = '_'.join([self.hparams['name'], dataset_name, 'fold' + str(self.cv_fold_idx)])
-
-        results = {
-            'model': [], 'dataset': [], 'fold_idx': [], 'subset_idx': [], 'frame_recall': [], 'doa_error': []
-        }
         
         #We check whether outputs if a list of List[Dict] (case with several subsets) or if it is a list of dicts (case of one subset)  
                
         if len(outputs)>0 and isinstance(outputs[0],list) : 
             
+            results = {
+            'model': [], 'dataset': [], 'fold_idx': [], 'subset_idx': [], 'frame_recall' : [],
+            'doa_error' : [], 'average_frame_recall': [], 'average_doa_error': [],
+            'std_frame_recall': [], 'std_doa_error': []
+        }
+            
             num_subsets = len(outputs)
 
             for subset_idx in range(num_subsets):
+                
                 frame_recall = torch.stack([x['test_frame_recall'] for x in outputs[subset_idx]]).detach().cpu().numpy()
                 doa_error = torch.stack([x['test_doa_error'] for x in outputs[subset_idx]]).detach().cpu().numpy()
 
                 num_sequences = len(frame_recall)
+                
+                _results = {'frame_recall' : [], 'doa_error' : []} 
 
                 for seq_idx in range(num_sequences):
-                    results['model'].append(self.hparams['name'])
-                    results['dataset'].append(dataset_name)
-                    results['fold_idx'].append(self.cv_fold_idx)
-                    results['subset_idx'].append(subset_idx)
-                    results['frame_recall'].append(frame_recall[seq_idx])
-                    results['doa_error'].append(doa_error[seq_idx])
+                    _results['frame_recall'].append(float(frame_recall[seq_idx]))
+                    _results['doa_error'].append(float(doa_error[seq_idx]))
                     
-            data_frame = pd.DataFrame.from_dict(results)
-            
-            average_frame_recall = torch.tensor(data_frame['frame_recall'].mean(), dtype=torch.float32)
-            average_doa_error = torch.tensor(data_frame['doa_error'].mean(), dtype=torch.float32)
-            
-            results_file = os.path.join(self.hparams['results_dir'],
-                                        'max_sources'+ str(self.max_num_sources) +  '_' +
-                                        'num_test_samples'+ str(len(data_frame['frame_recall']))
-                                        + '.json')
+                data_frame = pd.DataFrame.from_dict(_results)
+                
+                average_frame_recall = torch.tensor(data_frame['frame_recall'].mean(), dtype=torch.float32)
+                average_doa_error = torch.tensor(data_frame['doa_error'].mean(), dtype=torch.float32)
+                std_frame_recall = torch.tensor(data_frame['frame_recall'].std(), dtype=torch.float32)
+                std_doa_error = torch.tensor(data_frame['doa_error'].std(), dtype=torch.float32)
+                
+                results['model'].append(self.hparams['name'])
+                results['dataset'].append(dataset_name)
+                results['fold_idx'].append(self.cv_fold_idx)
+                results['subset_idx'].append(subset_idx)
+                results['average_frame_recall'].append(float(average_frame_recall))
+                results['average_doa_error'].append(float(average_doa_error))
+                results['std_frame_recall'].append(float(std_frame_recall))
+                results['std_doa_error'].append(float(std_doa_error))
+                results['frame_recall'].append(_results['frame_recall'])
+                results['doa_error'].append(_results['doa_error'])
 
+            results_file = os.path.join(self.hparams['results_dir'], self.hparams['name'] + '_'
+                                        + dataset_name + '_' + 'fold' + str(self.cv_fold_idx) + '_'
+                                    'max_sources'+ str(self.max_num_sources) +  '_' +
+                                    'num_test_dataloders'+ str(num_subsets)
+                                    + '.json')   
+                
+                # frame_recall = torch.stack([x['test_frame_recall'] for x in outputs[subset_idx]]).detach().cpu().numpy()
+                # doa_error = torch.stack([x['test_doa_error'] for x in outputs[subset_idx]]).detach().cpu().numpy()
+
+                # num_sequences = len(frame_recall)
+                
+                # average_frame_recall = torch.mean(frame_recall)
+                # average_doa_error = torch.mean(doa_error)      
+                # std_frame_recall = torch.std(frame_recall)
+                # std_doa_error = torch.std(doa_error)
+                
+                # results['model'].append(self.hparams['name'])
+                # results['dataset'].append(dataset_name)
+                # results['fold_idx'].append(self.cv_fold_idx)
+                # results['subset_idx'].append(subset_idx)
+                # results['average_frame_recall'].append(average_frame_recall)
+                # results['average_doa_error'].append(average_doa_error)
+                # results['std_frame_recall'].append(std_frame_recall)
+                # results['std_doa_error'].append(std_doa_error)
+
+                # for seq_idx in range(num_sequences):
+                #     results['model'].append(self.hparams['name'])
+                #     results['dataset'].append(dataset_name)
+                #     results['fold_idx'].append(self.cv_fold_idx)
+                #     results['subset_idx'].append(subset_idx)
+                #     results['frame_recall'].append(frame_recall[seq_idx])
+                #     results['doa_error'].append(doa_error[seq_idx])
+            
+            # results_file = os.path.join(self.hparams['results_dir'], self.hparams['name'] + '_'
+            #                             + dataset_name + '_' + 'fold' + str(self.cv_fold_idx) + '_'
+            #                         'max_sources'+ str(self.max_num_sources) +  '_' +
+            #                         'num_dataloaders'+ str(len(data_frame['frame_recall']))
+            #                         + '.json')
+            
+            # results_file = os.path.join(self.hparams['results_dir'],
+            #                             'max_sources'+ str(self.max_num_sources) +  '_' +
+            #                             'num_test_samples'+ str(len(data_frame['frame_recall']))
+            #                             + '.json')
+
+            # if not os.path.isfile(results_file):
+            #     data_frame.to_json(results_file)
+                
             if not os.path.isfile(results_file):
-                data_frame.to_json(results_file)
+                    with open(str(results_file),'w') as file : 
+                        json.dump(results, file)   
                     
         elif len(outputs)>0 and isinstance(outputs[0],dict) : 
             
@@ -169,7 +226,7 @@ class AbstractLocalizationModule(ptl.LightningModule, abc.ABC):
             results_file = os.path.join(self.hparams['results_dir'], self.hparams['name'] + '_'
                                         + dataset_name + '_' + 'fold' + str(self.cv_fold_idx) + '_'
                                     'max_sources'+ str(self.max_num_sources) +  '_' +
-                                    'num_test_samples'+ str(len(data_frame['frame_recall'])) + '_'
+                                    'num_test_samples'+ str(len(data_frame['frame_recall']))
                                     + '.json')
             
             if not os.path.isfile(results_file):
@@ -349,9 +406,9 @@ class LocalizationOutput(nn.Module):
 class TimeDistributedFC(nn.Module):
     """
     Class for applying time distributed fully connected layers with input tensors 
-    of shape  [N, T, in_features] where N is the batch_size, T is the number of time step,
+    of shape  [batch, T, in_features] where N is the batch_size, T is the number of time step,
     and in_features is the number of input features at each time step. 
-    Output tensors will have shape [N, T, out_features], where out_features is the number 
+    Output tensors will have shape [batch, T, out_features], where out_features is the number 
     of output features at each time step.
     """
     def __init__(self, in_features, out_features):
@@ -360,16 +417,16 @@ class TimeDistributedFC(nn.Module):
 
     def forward(self, x):
         
-        N,T = x.shape[0],x.shape[1]
+        batch,T = x.shape[0],x.shape[1]
         
-        # reshape input tensor to [N*T x B/4]
+        # reshape input tensor to [batch*T x B/4]
         x = x.view(-1, x.shape[-1])
 
         # apply linear layer to each time step
         x = self.linear(x)
 
-        # reshape output tensor to [N x T x S]
-        x = x.view(N, T, -1)
+        # reshape output tensor to [batch x T x S]
+        x = x.view(batch, T, -1)
 
         return x       
 
@@ -406,9 +463,9 @@ class MHLocalizationOutput(nn.Module):
                 input: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """Model forward pass.
 
-        :param input: Input tensor with dimensions [NxTxD], where N is the batch size, T is the number of time steps per
+        :param input: Input tensor with dimensions [batchxTxD], where batch is the batch size, T is the number of time steps per
                     chunk and D is the input dimension.
-        :return: Stacked direciton of arrival hypothesis with shape [NxTxself.num_hypothesisxoutput_dim]
+        :return: Stacked direciton of arrival hypothesis with shape [batchxTxself.num_hypothesisxoutput_dim]
         """  
         directions_of_arrival = []
         
