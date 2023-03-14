@@ -511,7 +511,7 @@ class MHSELLoss(_Loss):
             
         return sum_losses
     
-    def draft_make_sampling_loss_ambiguous_gts(self, hyps_stacked_t, source_activity_target_t, direction_of_arrival_target_t, mode='epe', top_n=1):
+    def draft_make_sampling_loss_ambiguous_gts(self, hyps_stacked_t, source_activity_target_t, direction_of_arrival_target_t, mode='epe', top_n=1, distance='euclidean'):
         # hyps_stacked_t of shape [batch,self.num_hypothesis,2]
         # source_activity_target_t of shape [batch,Max_sources]
         # direction_of_arrival_target_t of shape [batch,Max_sources,2]
@@ -539,17 +539,19 @@ class MHSELLoss(_Loss):
         epsilon = 0.05
         eps = 0.001
         
-        #### With euclidean distance
-        diff = torch.square(hyps_stacked_t_duplicated-gts) #Shape [batch,Max_sources,num_hypothesis,2]
-        channels_sum = torch.sum(diff, dim=2) #Sum over the two dimensions (azimuth and elevation here). Shape [batch,Max_sources,num_hypothesis]
-        spatial_epes = torch.sqrt(channels_sum + eps)  #Distance matrix [batch,Max_sources,num_hypothesis]
+        if distance=='euclidean' : 
+            #### With euclidean distance
+            diff = torch.square(hyps_stacked_t_duplicated-gts) #Shape [batch,Max_sources,num_hypothesis,2]
+            channels_sum = torch.sum(diff, dim=2) #Sum over the two dimensions (azimuth and elevation here). Shape [batch,Max_sources,num_hypothesis]
+            spatial_epes = torch.sqrt(channels_sum + eps)  #Distance matrix [batch,Max_sources,num_hypothesis]
 
-        # ### With spherical distance
-        # hyps_stacked_t = hyps_stacked_t.view(-1,2) #Shape (batch*num_hyps,2)
-        # gts = gts.view(-1,2) #Shape (batch*num_hyps,2)
-        # diff = compute_spherical_distance(hyps_stacked_t,gts)
-        # diff = diff.view(batch,num_hyps) # Shape (batch,num_hyps)
-        # spatial_epes = diff.unsqueeze(2).unsqueeze(3).unsqueeze(4) # Shape (batch,num_hyps,1,1,1)
+        elif distance=='spherical' : 
+            ### With spherical distance
+            hyps_stacked_t = hyps_stacked_t.view(-1,2) #Shape (batch*num_hyps,2)
+            gts = gts.view(-1,2) #Shape (batch*num_hyps,2)
+            diff = compute_spherical_distance(hyps_stacked_t,gts)
+            diff = diff.view(batch,num_hyps) # Shape (batch,num_hyps)
+            spatial_epes = diff.unsqueeze(2).unsqueeze(3).unsqueeze(4) # Shape (batch,num_hyps,1,1,1)
         
         sum_losses = torch.constant(0.0)
 
