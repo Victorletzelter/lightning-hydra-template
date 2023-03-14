@@ -60,17 +60,17 @@ class TUTSoundEventsDataModule(pl.LightningDataModule):
                                             sequence_duration=self.sequence_duration, chunk_length=self.chunk_length,
                                             frame_length=self.frame_length, num_fft_bins=self.num_fft_bins,
                                             max_num_sources=self.max_num_sources,
-                                            num_overlapping_sources=self.num_overlapping_sources)
+                                            )
         self.val_dataset = TUTSoundEvents(self.root,  tmp_dir = self.tmp_dir, split='valid', test_fold_idx=self.test_fold_idx,
                                           sequence_duration=self.sequence_duration, chunk_length=self.chunk_length,
                                           frame_length=self.frame_length, num_fft_bins=self.num_fft_bins,
                                           max_num_sources=self.max_num_sources,
-                                          num_overlapping_sources=self.num_overlapping_sources)
-        self.test_dataset = TUTSoundEvents(self.root,  tmp_dir = self.tmp_dir, split='test', test_fold_idx=self.test_fold_idx,
-                                           sequence_duration=self.sequence_duration, chunk_length=self.chunk_length,
-                                           frame_length=self.frame_length, num_fft_bins=self.num_fft_bins,
-                                           max_num_sources=self.max_num_sources,
-                                           num_overlapping_sources=self.num_overlapping_sources)
+                                          )
+        # self.test_dataset = TUTSoundEvents(self.root,  tmp_dir = self.tmp_dir, split='test', test_fold_idx=self.test_fold_idx,
+        #                                    sequence_duration=self.sequence_duration, chunk_length=self.chunk_length,
+        #                                    frame_length=self.frame_length, num_fft_bins=self.num_fft_bins,
+        #                                    max_num_sources=self.max_num_sources,
+        #                                    num_overlapping_sources=self.num_overlapping_sources)
 
     def train_dataloader(self):
         return DataLoader(self.train_dataset, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=False)
